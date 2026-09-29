@@ -1,0 +1,59 @@
+{
+  "bug_id": "BUG-301",
+  "relationship_mode": "standalone",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "bug_title": "Severity descending sort must follow business ranking under SQL-backed execution",
+  "bug_summary": "GET /api/alerts?sortBy=severity&sortDirection=desc currently sorts the string-backed Severity field directly, which can produce alphabetical or provider-specific ordering instead of the business rank Critical > High > Medium > Low when executed by a relational provider.",
+  "case": "SIMPLE",
+  "scope_anchor": {
+    "path": "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "symbol": "AlertRepository.GetAllAsync / ApplySorting",
+    "reason": "Owns the SQL-backed alert query and currently applies direct ordering on the string-converted Severity enum."
+  },
+  "exact_source_files": [
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "exact_test_files": [
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "expected_behavior": [
+    "Sorting by severity descending returns Critical, High, Medium, Low.",
+    "Sorting by severity ascending returns Low, Medium, High, Critical.",
+    "Behavior is stable under relational query translation rather than depending on EF InMemory ordering semantics."
+  ],
+  "constraints": [
+    "Preserve Severity storage as string.",
+    "Keep the change inside the repository sorting path and focused repository tests unless validation requires test infrastructure support.",
+    "No schema or migration changes."
+  ],
+  "out_of_scope": [
+    "Controller, service, or DTO contract changes",
+    "Database schema changes",
+    "Broad API integration coverage"
+  ],
+  "local_hypothesis": "Ordering by a string-converted enum translates to lexical sorting in SQL-backed providers; replacing direct Severity ordering with a translated rank expression will align query results with business severity rank.",
+  "cheap_discriminating_check": "A repository test using a relational EF provider should fail for descending severity ordering before the fix and pass after the fix.",
+  "validation_commands": [
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~GetAllAsync_WithSortBySeverity\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\"",
+    "dotnet build AlertService.sln"
+  ],
+  "reproduction_commands": [
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~GetAllAsync_WithSortBySeverity\""
+  ],
+  "known_facts": [
+    "Severity enum values are Low=1, Medium=2, High=3, Critical=4.",
+    "AlertConfiguration stores Severity via HasConversion<string>().",
+    "AlertRepository.ApplySorting currently orders by a.Severity directly for severity sorting.",
+    "Existing repository tests use EF InMemory, which may not expose SQL ordering behavior."
+  ],
+  "missing_facts": [],
+  "unresolved_questions": []
+}

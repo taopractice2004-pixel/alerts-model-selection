@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.31">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AlertService.Common\AlertService.Common.csproj" />
+    <ProjectReference Include="..\AlertService.DTO\AlertService.DTO.csproj" />
+    <ProjectReference Include="..\AlertService.Models\AlertService.Models.csproj" />
+    <ProjectReference Include="..\AlertService.Data\AlertService.Data.csproj" />
+    <ProjectReference Include="..\AlertService.Data.SQL\AlertService.Data.SQL.csproj" />
+  </ItemGroup>
+</Project>

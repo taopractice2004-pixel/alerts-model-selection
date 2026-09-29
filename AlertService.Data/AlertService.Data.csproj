@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\AlertService.Models\AlertService.Models.csproj" />
+  </ItemGroup>
+</Project>

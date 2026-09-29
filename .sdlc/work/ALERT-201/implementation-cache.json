@@ -1,0 +1,107 @@
+{
+  "jira_id": "ALERT-201",
+  "jira_project": "ALERT",
+  "case": "SIMPLE",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "story_title": "Add created-date range filtering to GET /api/alerts",
+  "story_summary": "Add optional inclusive created-date range filters to the alerts list endpoint, reject invalid ranges as 400 validation errors, preserve existing filters/sorting/paging, and cover the change with focused API/service/repository tests.",
+  "likely_touched_layers": [
+    "DTO request validation",
+    "controller query contract surface",
+    "service pass-through",
+    "data interface contract",
+    "SQL repository filtering",
+    "unit tests"
+  ],
+  "scope_anchors": [
+    {
+      "path": "AlertService.DTO/Requests/AlertQueryRequest.cs",
+      "reason": "Current query contract exposes filters, paging, sorting, and search but no created-date range fields or cross-field range validation."
+    },
+    {
+      "path": "AlertService.API/Controllers/AlertsController.cs",
+      "reason": "GET /api/alerts binds AlertQueryRequest from query and already advertises 400 validation behavior under ApiController."
+    },
+    {
+      "path": "AlertService.API/Services/AlertManagementService.cs",
+      "reason": "GetAllAsync forwards query options to the repository and must pass through the new date filters."
+    },
+    {
+      "path": "AlertService.Data/Interfaces/IAlertRepository.cs",
+      "reason": "Repository contract currently stops at existing filters and paging options; it must carry the new range parameters."
+    },
+    {
+      "path": "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+      "reason": "Owns the actual alert-list query and currently applies active-status, severity, title-search, sorting, and paging only."
+    }
+  ],
+  "exact_source_files": [
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "acceptance_criteria": [
+    "GET /api/alerts accepts optional createdFrom and createdTo query parameters.",
+    "createdFrom is inclusive and returns alerts with CreatedDate >= createdFrom.",
+    "createdTo is inclusive and returns alerts with CreatedDate <= createdTo.",
+    "When both are supplied, both filters are applied together.",
+    "When createdFrom is later than createdTo, the API returns 400 Bad Request with a validation error.",
+    "Existing filters, sorting, and paging continue to work unchanged.",
+    "No database schema or migration changes are required.",
+    "Unit tests cover request validation, service pass-through, and repository filtering."
+  ],
+  "constraints": [
+    "Preserve the existing controller -> service -> repository layering.",
+    "Reuse existing ApiController validation flow where practical.",
+    "Do not alter active-status, severity, title-search, sorting, or paging semantics.",
+    "No schema, migration, or SQL script changes."
+  ],
+  "out_of_scope": [
+    "Relative date presets",
+    "UI/client changes",
+    "Database schema changes"
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\"",
+    "dotnet build AlertService.sln",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --collect:\"XPlat Code Coverage\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [
+    "dotnet tool restore",
+    "dotnet restore",
+    "dotnet run --project AlertService.API --launch-profile https"
+  ],
+  "design_decisions": [
+    "Validate createdFrom <= createdTo at the request boundary so invalid input fails before repository execution.",
+    "Apply CreatedDate predicates inclusively in the repository query before count and paging.",
+    "Keep controller changes minimal by reusing AlertQueryRequest model binding."
+  ],
+  "known_facts": [
+    "The API already supports active-status, severity, title search, sorting, and paging filters.",
+    "AlertQueryRequest currently does not expose created-date filters.",
+    "AlertsController GET /api/alerts already binds AlertQueryRequest from query and advertises 400 responses.",
+    "AlertManagementService currently forwards query options to the repository.",
+    "AlertRepository currently applies status, severity, search, sorting, counting, and paging but no created-date predicates.",
+    "No database schema or migration changes are required."
+  ],
+  "unresolved_questions": [],
+  "missing_facts": []
+}

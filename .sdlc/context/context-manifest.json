@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "stage": "Repository Context Setup",
+  "generatedAtUtc": "2026-09-28T05:42:26.2502430Z",
+  "repositoryMode": "MODE_C_EXISTING_PROJECT",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "AlertService.API/Program.cs",
+    "language": "C#",
+    "platformOrRuntime": ".NET 8",
+    "applicationType": "ASP.NET Core Web API microservice",
+    "dataStore": "SQL Server via Entity Framework Core 8",
+    "testFrameworks": [
+      "xUnit",
+      "Moq",
+      "ASP.NET Core WebApplicationFactory",
+      "Coverlet"
+    ],
+    "buildCommand": "dotnet build AlertService.sln",
+    "testCommand": "dotnet test",
+    "runCommand": "dotnet run --project AlertService.API --launch-profile https"
+  },
+  "sourceInputs": {
+    "rootDocs": [
+      "README.md",
+      ".sdlc/README.md",
+      ".github/copilot-instructions.md"
+    ],
+    "buildFiles": [
+      "AlertService.sln",
+      "Directory.Build.props",
+      "dotnet-tools.json",
+      "AlertService.API/AlertService.API.csproj",
+      "AlertService.Data.SQL/AlertService.Data.SQL.csproj",
+      "AlertService.API.Tests/AlertService.API.Tests.csproj"
+    ],
+    "standards": [
+      "standards/coding-standards.md",
+      "standards/backend-dotnet-standards.md",
+      "standards/api-rest-standards.md",
+      "standards/service-architecture-standards.md",
+      "standards/database-standards.md",
+      "standards/frontend-react-standards.md",
+      "standards/ui-standards.md"
+    ],
+    "sampleSource": [
+      "AlertService.API/Program.cs",
+      "AlertService.API/Controllers/AlertsController.cs",
+      "AlertService.API/Services/AlertManagementService.cs",
+      "AlertService.Data.SQL/AlertDbContext.cs"
+    ]
+  },
+  "notes": "Repository cache generated from solution/build metadata, README, standards, and representative API/data source files. Refresh only when repo structure, commands, standards, or architecture materially changes."
+}

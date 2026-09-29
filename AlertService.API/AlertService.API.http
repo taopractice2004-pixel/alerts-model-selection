@@ -1,0 +1,34 @@
+@baseUrl = https://localhost:7080
+
+GET {{baseUrl}}/api/alerts?page=1&pageSize=10&sortBy=createdDate&sortDirection=desc&search=disk
+
+###
+POST {{baseUrl}}/api/alerts
+Content-Type: application/json
+
+{
+  "title": "CPU usage high",
+  "description": "CPU above 90% on app-server-01",
+  "severity": "High",
+  "isActive": true
+}
+
+###
+GET {{baseUrl}}/api/alerts/1
+
+###
+PUT {{baseUrl}}/api/alerts/1
+Content-Type: application/json
+
+{
+  "title": "CPU usage high (acknowledged)",
+  "description": "Investigating",
+  "severity": "Medium",
+  "isActive": false
+}
+
+###
+DELETE {{baseUrl}}/api/alerts/1
+
+###
+PATCH {{baseUrl}}/api/alerts/1/deactivate
