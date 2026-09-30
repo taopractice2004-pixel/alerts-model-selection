@@ -1,0 +1,75 @@
+{
+  "story": {
+    "id": "ALERT-411",
+    "project": "ALERT",
+    "title": "Duplicate Alert Suppression Window",
+    "date_analyzed": "2026-09-30",
+    "analysis_case": "SIMPLE"
+  },
+  "scope": {
+    "summary": "Implement duplicate alert suppression for POST /api/alerts using configurable window minutes, returning 200 with suppression header for duplicates and 201 for newly created alerts.",
+    "likely_touched_layers": [
+      "API controller",
+      "Service layer",
+      "Configuration/options",
+      "Integration test coverage"
+    ],
+    "scope_anchors": [
+      "POST /api/alerts status/header branching for duplicate suppression result",
+      "Duplicate detection in alert create path using title case-insensitive + severity + active + created within configurable window",
+      "appsettings-based suppression window"
+    ]
+  },
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/IntegrationTests/TestCasesCsvTests.cs",
+    "AlertService.API.Tests/TestInfrastructure/AlertsApiFactory.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md"
+  ],
+  "commands": {
+    "restore": [
+      "dotnet tool restore",
+      "dotnet restore"
+    ],
+    "build": [
+      "dotnet build AlertService.sln"
+    ],
+    "test": [
+      "dotnet test"
+    ],
+    "focused_test": [
+      "dotnet test AlertService.API.Tests --filter \"FullyQualifiedName~TC_411_|FullyQualifiedName~AlertManagementServiceTests\""
+    ],
+    "validation": [
+      "dotnet build AlertService.sln",
+      "dotnet test AlertService.API.Tests --filter \"FullyQualifiedName~TC_411_|FullyQualifiedName~AlertManagementServiceTests\""
+    ]
+  },
+  "constraints": [
+    "Duplicate match requires same title (case-insensitive) and same severity.",
+    "Duplicate candidate must be active.",
+    "Duplicate candidate must be within configured suppression window minutes.",
+    "Duplicate response must be 200 OK with header X-Duplicate-Suppressed: true and existing alert payload.",
+    "New alert response remains 201 Created.",
+    "Suppression window must be configuration-driven via appsettings.json."
+  ],
+  "deterministic_prepass": {
+    "source": "provided_by_user",
+    "smallest_concrete_scope": "controller + service duplicate decision path + configuration wiring + integration/service tests"
+  },
+  "unresolved_questions": [],
+  "missing_facts": []
+}

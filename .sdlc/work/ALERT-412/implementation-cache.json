@@ -1,0 +1,75 @@
+{
+  "story": {
+    "id": "ALERT-412",
+    "project": "ALERT",
+    "title": "Alert Volume Trend Endpoint",
+    "date_analyzed": "2026-09-30",
+    "analysis_case": "SIMPLE"
+  },
+  "scope": {
+    "summary": "Add GET /api/alerts/trends?days=N to return daily UTC alert counts with per-severity breakdowns and model-validation-based 400 behavior for invalid days values.",
+    "likely_touched_layers": [
+      "API controller",
+      "Service layer",
+      "Data abstraction",
+      "SQL repository aggregation",
+      "DTO request contract",
+      "Integration and unit tests"
+    ],
+    "scope_anchors": [
+      "GET /api/alerts/trends route and handler",
+      "days query default/bounds (default 7, min 1, max 90)",
+      "UTC calendar-day bucket generation for last N days, oldest first",
+      "Per-day totals plus severity counts including zero-count days/severities",
+      "ValidationProblemDetails 400 behavior for invalid query values"
+    ]
+  },
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/IntegrationTests/TestCasesCsvTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "commands": {
+    "restore": [
+      "dotnet tool restore",
+      "dotnet restore"
+    ],
+    "build": [
+      "dotnet build AlertService.sln"
+    ],
+    "focused_test": [
+      "dotnet test AlertService.API.Tests --filter \"FullyQualifiedName~TC_412_|FullyQualifiedName~AlertManagementServiceTests|FullyQualifiedName~AlertsControllerTests\""
+    ],
+    "validation": [
+      "dotnet build AlertService.sln",
+      "dotnet test AlertService.API.Tests --filter \"FullyQualifiedName~TC_412_|FullyQualifiedName~AlertManagementServiceTests|FullyQualifiedName~AlertsControllerTests\""
+    ]
+  },
+  "constraints": [
+    "Reuse existing severity ordering conventions used by summary behavior.",
+    "Use UTC day boundaries consistently through query and response shaping.",
+    "Return exactly N day buckets for requested window, oldest first.",
+    "Include zero-count buckets and zero-count severities.",
+    "Invalid or non-numeric days must return 400 with ValidationProblemDetails behavior consistent with existing query validation."
+  ],
+  "deterministic_prepass": {
+    "source": "provided_by_user_plus_repo_context",
+    "smallest_concrete_scope": "controller + query contract + service shaping + repository aggregation + focused tests"
+  },
+  "unresolved_questions": [],
+  "missing_facts": []
+}

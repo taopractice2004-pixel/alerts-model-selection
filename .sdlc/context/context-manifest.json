@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context-complete",
+  "generatedAtUtc": "2026-09-30T07:06:03Z",
+  "repositoryMode": "MODE_C_EXISTING_PROJECT",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "language": "C#",
+    "runtime": "net8.0",
+    "applicationType": "ASP.NET Core Web API",
+    "primaryEntry": "AlertService.API/Program.cs",
+    "dataStore": "SQL Server via EF Core",
+    "buildCommand": "dotnet build AlertService.sln",
+    "testCommand": "dotnet test",
+    "runCommand": "dotnet run --project AlertService.API --launch-profile https"
+  },
+  "sourceInputs": {
+    "rootDocs": [
+      "README.md",
+      "AlertService.sln",
+      "Directory.Build.props",
+      "dotnet-tools.json"
+    ],
+    "standards": [
+      "standards/coding-standards.md",
+      "standards/backend-dotnet-standards.md",
+      "standards/api-rest-standards.md",
+      "standards/service-architecture-standards.md",
+      "standards/database-standards.md",
+      "standards/frontend-react-standards.md",
+      "standards/ui-standards.md"
+    ]
+  },
+  "gaps": {
+    "cicdPipeline": "NOT_AVAILABLE",
+    "deploymentRunbook": "NOT_AVAILABLE",
+    "openApiContractInRepo": "NOT_AVAILABLE",
+    "lintOrFormatCommand": "NOT_CONFIGURED"
+  }
+}

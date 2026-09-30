@@ -14,7 +14,15 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    Task<AlertTrendResponse> GetTrendsAsync(int days = 7, CancellationToken cancellationToken = default);
+
+    Task<(AlertResponse Alert, bool IsDuplicateSuppressed)> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns>The updated alert with tags, or <c>null</c> if no alert with the given id exists.</returns>
+    Task<AlertResponse?> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> when the tag was removed; <c>false</c> when alert or tag assignment does not exist.</returns>
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);

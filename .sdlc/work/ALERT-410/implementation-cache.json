@@ -1,0 +1,95 @@
+{
+  "story": {
+    "id": "ALERT-410",
+    "project": "ALERT",
+    "title": "Alert Tagging",
+    "date_analyzed": "2026-09-30",
+    "analysis_case": "AMBIGUOUS"
+  },
+  "scope": {
+    "summary": "Add alert tagging with many-to-many persistence, tag assignment/removal endpoints, composable tag filtering on list, and tag projection in alert response.",
+    "likely_touched_layers": [
+      "API controller",
+      "Service layer",
+      "Data abstractions/repository",
+      "EF Core model/migrations",
+      "DTO mapping/response"
+    ],
+    "scope_anchors": [
+      "POST /api/alerts/{id}/tags with case-insensitive dedupe and per-alert max/tag-length validation",
+      "DELETE /api/alerts/{id}/tags/{tag} returning 404 when alert or assignment does not exist",
+      "GET /api/alerts optional tag filter composable with existing filters",
+      "AlertResponse includes tags",
+      "Tag entity + AlertTag join mapping/migration"
+    ]
+  },
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertTagConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/20260930071610_AddAlertTagging.cs",
+    "AlertService.Data.SQL/Migrations/20260930071610_AddAlertTagging.Designer.cs",
+    "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AddTagsRequest.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/AlertTag.cs",
+    "AlertService.Models/Tag.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/IntegrationTests/TestCasesCsvTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "commands": {
+    "restore": [
+      "dotnet tool restore",
+      "dotnet restore"
+    ],
+    "build": [
+      "dotnet build AlertService.sln"
+    ],
+    "test": [
+      "dotnet test"
+    ],
+    "focused_test": [
+      "dotnet test AlertService.API.Tests --filter \"FullyQualifiedName~TC_410_|FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+      "dotnet test AlertService.Data.SQL.Tests"
+    ],
+    "validation": [
+      "dotnet ef migrations add AddAlertTagging --project AlertService.Data.SQL --startup-project AlertService.API",
+      "dotnet ef database update --project AlertService.Data.SQL --startup-project AlertService.API"
+    ]
+  },
+  "deterministic_prepass": {
+    "smallest_concrete_scope": "Alerts API + service + SQL repository + EF model/migration path",
+    "existing_cache_state": "No prior .sdlc/work/ALERT-410 artifacts found",
+    "likely_risks": [
+      "Integration tests already reference AddTagsRequest while DTO type is absent in current source",
+      "Tag normalization/matching semantics not fully specified"
+    ]
+  },
+  "unresolved_questions": [
+    "Should GET /api/alerts?tag=... match any assigned tag exactly (case-insensitive) or support partial matches?",
+    "Should tags be persisted in canonical form (first-seen casing, lowercased, or trimmed-only)?",
+    "Should DELETE /api/alerts/{id}/tags/{tag} treat URL-decoded whitespace/special characters as valid after trim?"
+  ],
+  "missing_facts": []
+}

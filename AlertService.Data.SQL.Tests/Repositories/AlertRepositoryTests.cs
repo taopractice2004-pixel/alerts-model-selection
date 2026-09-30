@@ -278,6 +278,48 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAllAsync_WithTag_ReturnsOnlyAlertsHavingMatchingTagCaseInsensitive()
+    {
+        var tagged = await _repository.AddAsync(NewAlert("Tagged", Severity.High, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
+        var untagged = await _repository.AddAsync(NewAlert("Untagged", Severity.Low, new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        await _repository.AddTagsAsync(tagged.Id, ["ops"]);
+        await _repository.AddTagsAsync(untagged.Id, ["infra"]);
+
+        var result = await _repository.GetAllAsync(tag: "OPS");
+
+        Assert.Single(result.Items);
+        Assert.Equal(tagged.Id, result.Items[0].Id);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_AddsDistinctTags_CaseInsensitive()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+
+        var updated = await _repository.AddTagsAsync(alert.Id, ["ops", "Ops", "urgent"]);
+
+        Assert.NotNull(updated);
+        Assert.Equal(2, updated!.AlertTags.Count);
+        Assert.Contains(updated.AlertTags, at => string.Equals(at.Tag.Name, "ops", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(updated.AlertTags, at => string.Equals(at.Tag.Name, "urgent", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenPresent_RemovesAssignment()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert.Id, ["ops"]);
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, "OPS");
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+
+        Assert.True(removed);
+        Assert.NotNull(reloaded);
+        Assert.Empty(reloaded!.AlertTags);
+    }
+
+    [Fact]
     public async Task GetSummaryAsync_WhenEmpty_ReturnsZeroCounts()
     {
         var result = await _repository.GetSummaryAsync();
