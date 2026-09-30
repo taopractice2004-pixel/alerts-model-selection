@@ -1,0 +1,82 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "jira_id": "ALERT-412",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends?days=N to return UTC daily alert-creation buckets for the last N days with total and per-severity counts, including zero-count days and zero-count severities, while reusing existing severity ordering and query-validation patterns.",
+  "scope_anchors": [
+    "GET /api/alerts/trends?days=N",
+    "AlertService.API/Controllers/AlertsController.cs summary endpoint neighborhood",
+    "AlertService.DTO/Requests query validation under [ApiController]",
+    "AlertService.API/Services/IAlertService.cs trend retrieval contract",
+    "AlertService.API/Services/AlertManagementService.cs summary-style severity ordering",
+    "AlertService.Data/Interfaces/IAlertRepository.cs trend aggregation boundary",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs UTC date and severity grouping"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertTrendQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs",
+    "AlertService.Common/Enums/Severity.cs"
+  ],
+  "likely_new_files": [
+    "AlertService.DTO/Requests/AlertTrendQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "constraints": [
+    "Endpoint route is GET /api/alerts/trends under the existing alerts controller.",
+    "days defaults to 7 when omitted.",
+    "days must validate within the inclusive range 1..90.",
+    "Non-numeric or out-of-range days values must return 400 with ValidationProblemDetails via the existing query-validation path.",
+    "Return one bucket per UTC calendar day for the last N days, oldest first.",
+    "Each bucket must include total count and per-severity counts, including zero-count days and zero-count severities.",
+    "Severity ordering must match the existing summary endpoint convention: Low, Medium, High, Critical.",
+    "Preserve controller -> service -> repository layering and keep persistence logic out of the controller."
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj",
+    "dotnet build AlertService.sln"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller coverage for trend endpoint success-path wiring and validation behavior.",
+    "Service coverage for mapping repository aggregates into daily buckets with Low/Medium/High/Critical ordering and zero-filled severity counts.",
+    "Repository coverage for UTC day bucketing, oldest-first ordering, last-N-day windowing, and zero-count day filling."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

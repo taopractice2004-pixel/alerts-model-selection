@@ -1,0 +1,86 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "jira_id": "ALERT-411",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add configurable duplicate suppression to POST /api/alerts so recent active alerts with the same title and severity return the existing alert instead of creating a new row.",
+  "scope_anchors": [
+    "POST /api/alerts",
+    "AlertsController.Create",
+    "IAlertService.CreateAsync",
+    "AlertManagementService.CreateAsync",
+    "IAlertRepository duplicate lookup boundary",
+    "AlertRepository duplicate lookup query"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Options/AlertSuppressionOptions.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/CreateAlertResult.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs",
+    "AlertService.API/appsettings.json",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs"
+  ],
+  "likely_new_files": [
+    "AlertService.API/Options/AlertSuppressionOptions.cs",
+    "AlertService.API/Services/CreateAlertResult.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "constraints": [
+    "Suppress only on POST /api/alerts.",
+    "Match duplicates by case-insensitive title and exact severity.",
+    "Suppress only when the prior matching alert is active.",
+    "Suppress only when the prior matching alert was created within the configured window.",
+    "Return 200 OK with header X-Duplicate-Suppressed: true when suppression occurs.",
+    "Return 201 Created for genuinely new alerts.",
+    "Read the suppression window from appsettings.json rather than a hardcoded literal.",
+    "Do not suppress across different severities.",
+    "Do not suppress when the prior matching alert is inactive.",
+    "Use the existing TimeProvider-based UTC clock path."
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj",
+    "dotnet build AlertService.sln"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller coverage for 200/201 branching and duplicate-suppressed response header.",
+    "Service coverage for cutoff calculation, duplicate lookup before insert, and new-vs-suppressed outcomes.",
+    "Service coverage that different severity, inactive prior alerts, and outside-window prior alerts do not suppress.",
+    "Repository coverage for case-insensitive title matching, exact severity, active-only filtering, and created-since cutoff behavior."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

@@ -30,6 +30,9 @@ public class AlertQueryRequest : IValidatableObject
     [StringLength(AlertConstants.SearchMaxLength)]
     public string? Search { get; set; }
 
+    [StringLength(AlertConstants.TagMaxLength)]
+    public string? Tag { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CreatedFrom.HasValue && CreatedTo.HasValue && CreatedFrom.Value > CreatedTo.Value)
@@ -37,6 +40,22 @@ public class AlertQueryRequest : IValidatableObject
             yield return new ValidationResult(
                 "CreatedFrom must be less than or equal to CreatedTo.",
                 new[] { nameof(CreatedFrom), nameof(CreatedTo) });
+        }
+
+        if (Tag is not null)
+        {
+            if (string.IsNullOrWhiteSpace(Tag))
+            {
+                yield return new ValidationResult(
+                    "Tag must contain at least one non-whitespace character.",
+                    new[] { nameof(Tag) });
+            }
+            else if (Tag.Trim().Length > AlertConstants.TagMaxLength)
+            {
+                yield return new ValidationResult(
+                    $"Tag must be {AlertConstants.TagMaxLength} characters or fewer.",
+                    new[] { nameof(Tag) });
+            }
         }
     }
 }

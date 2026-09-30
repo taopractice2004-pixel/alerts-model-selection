@@ -1,0 +1,92 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "jira_id": "ALERT-410",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add free-form alert tagging with assignment, removal, composable list filtering, response enrichment, and supporting persistence changes.",
+  "scope_anchors": [
+    "GET /api/alerts with optional tag filter",
+    "POST /api/alerts/{id}/tags",
+    "DELETE /api/alerts/{id}/tags/{tag}",
+    "AlertManagementService.GetAllAsync and new tag operations",
+    "IAlertRepository.GetAllAsync and alert tag persistence"
+  ],
+  "exact_source_files": [
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.API/Middleware/ExceptionHandlingMiddleware.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/20260929170000_AddAlertTags.cs",
+    "AlertService.Data.SQL/Migrations/20260929170000_AddAlertTags.Designer.cs",
+    "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Requests/AssignAlertTagsRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs",
+    "database/02_AlertServiceDb_Migrations.sql"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Middleware/ExceptionHandlingMiddleware.cs",
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.Data.SQL/Configurations",
+    "AlertService.Data.SQL/Migrations",
+    "database/02_AlertServiceDb_Migrations.sql"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "constraints": [
+    "Introduce a Tag many-to-many relationship to Alert with migration support.",
+    "Deduplicate assigned tags case-insensitively.",
+    "Enforce a maximum of 10 tags per alert.",
+    "Enforce tag length between 1 and 30 characters.",
+    "DELETE must return 404 when the alert or alert-tag assignment does not exist.",
+    "GET /api/alerts tag filtering must compose with the existing filters and search behavior.",
+    "AlertResponse must include tags without bypassing the existing mapping layer."
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj",
+    "dotnet build AlertService.sln"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller coverage for tag assignment/removal routes and GET filter forwarding.",
+    "Service coverage for tag validation, dedupe, maximum-count enforcement, and not-found behavior.",
+    "Repository coverage for many-to-many persistence and composable tag filtering."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "Confirm during implementation whether the checked-in database migration SQL script must be updated alongside EF migrations.",
+    "Confirm the repository's preferred persisted tag casing while keeping dedupe and filtering case-insensitive."
+  ],
+  "unresolved_questions": []
+}

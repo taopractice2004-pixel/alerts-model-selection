@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context-complete",
+  "generatedAtUtc": "2026-09-29T09:58:43.0694966Z",
+  "repositoryMode": "MODE_C_EXISTING_PROJECT",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "AlertService.API/Program.cs",
+    "language": "C#",
+    "platformOrRuntime": ".NET 8 / ASP.NET Core",
+    "applicationType": "Multi-project Web API microservice solution",
+    "dataStore": "SQL Server via Entity Framework Core",
+    "testFrameworks": [
+      "xUnit",
+      "Moq",
+      "Microsoft.AspNetCore.Mvc.Testing",
+      "EF Core InMemory",
+      "EF Core Sqlite",
+      "Coverlet"
+    ],
+    "buildCommand": "dotnet build AlertService.sln",
+    "testCommand": "dotnet test",
+    "runCommand": "dotnet run --project AlertService.API --launch-profile https"
+  },
+  "sourceInputs": {
+    "rootDocs": [
+      "README.md",
+      ".github/copilot-instructions.md",
+      ".sdlc/README.md"
+    ],
+    "buildFiles": [
+      "AlertService.sln",
+      "Directory.Build.props",
+      "dotnet-tools.json",
+      "AlertService.API/AlertService.API.csproj",
+      "AlertService.API.Tests/AlertService.API.Tests.csproj",
+      "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+    ],
+    "standards": [
+      "standards/coding-standards.md",
+      "standards/backend-dotnet-standards.md",
+      "standards/api-rest-standards.md",
+      "standards/service-architecture-standards.md",
+      "standards/database-standards.md",
+      "standards/frontend-react-standards.md",
+      "standards/ui-standards.md"
+    ],
+    "sampleSource": [
+      "AlertService.API/Program.cs",
+      "AlertService.API/Controllers/AlertsController.cs",
+      "AlertService.API/Services/AlertManagementService.cs",
+      "AlertService.Data/Interfaces/IAlertRepository.cs",
+      "AlertService.Data.SQL/AlertDbContext.cs",
+      "AlertService.Data.SQL/Extensions/ServiceCollectionExtensions.cs"
+    ]
+  },
+  "notes": "Compact repository cache for the AlertService .NET solution. Later stages should use these files first, then read only the directly impacted source slice."
+}
