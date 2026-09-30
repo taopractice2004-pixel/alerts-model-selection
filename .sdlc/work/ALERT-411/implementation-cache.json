@@ -1,0 +1,76 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "jira_id": "ALERT-411",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate alerts on POST /api/alerts: when an active alert with the same Title (case-insensitive) and Severity was created within a configurable window (default 15 min), return 200 OK with the existing alert and header X-Duplicate-Suppressed: true instead of creating a new row; a genuinely new alert still returns 201 Created.",
+  "scope_anchors": [
+    "POST /api/alerts (Create action: 201 vs 200 + X-Duplicate-Suppressed header)",
+    "AlertsController.Create",
+    "AlertManagementService.CreateAsync / IAlertService.CreateAsync",
+    "IAlertRepository / AlertRepository (find active duplicate in window)",
+    "appsettings.json configurable suppression window (minutes)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Services/AlertManagementService.cs (duplicate check + window read in CreateAsync)",
+    "AlertService.API/Services/IAlertService.cs (CreateAsync returns suppression-aware result)",
+    "AlertService.API/Controllers/AlertsController.cs (Create: 201 Created vs 200 OK + response header)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs (find active duplicate by title/severity/window)",
+    "AlertService.API/appsettings.json (DuplicateSuppression window minutes setting)"
+  ],
+  "exact_source_files_extended": [
+    "AlertService.Data/Interfaces/IAlertRepository.cs (add find-active-duplicate contract)",
+    "AlertService.API/Program.cs (bind + register suppression options)",
+    "AlertService.API/Configuration/DuplicateSuppressionOptions.cs (new options class, default 15)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.API/Program.cs"
+  ],
+  "selected_standards": [
+    "coding-standards.md",
+    "backend-dotnet-standards.md",
+    "api-rest-standards.md",
+    "service-architecture-standards.md",
+    "database-standards.md"
+  ],
+  "constraints": [
+    "Duplicate match = active alert (IsActive == true) AND same Severity AND Title equal case-insensitively AND CreatedDate >= (now - window). All four must hold; do not match on Title substring.",
+    "Must NOT suppress across different severities, and must NOT suppress when the prior matching alert is inactive.",
+    "On suppression: return 200 OK with the existing alert body and response header 'X-Duplicate-Suppressed: true'. On genuine create: return 201 Created (existing CreatedAtRoute behavior); do not set the header (or set it to false) on a real create.",
+    "Suppression window in minutes MUST be read from appsettings.json (bound options), never hardcoded; provide a sensible default (15) when the setting is absent.",
+    "DECISION: Config section 'Alerts:DuplicateSuppression:WindowMinutes' bound to a DuplicateSuppressionOptions class registered in Program.cs; default WindowMinutes = 15.",
+    "DECISION: IAlertService.CreateAsync returns a suppression-aware result (e.g. CreateAlertResult(bool Suppressed, AlertResponse Alert)) so the controller chooses status code + header; keep DTOs entity-free.",
+    "DECISION: Use TimeProvider (already injected) to compute the window threshold for deterministic, testable time.",
+    "DECISION: Duplicate lookup lives in the repository (new IAlertRepository method); keep EF/LINQ out of the controller and service business logic per service-architecture standards.",
+    "Repository duplicate query: no SELECT *; filter server-side on IsActive, Severity, case-insensitive Title equality, and CreatedDate threshold; if multiple match, prefer the most recent."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Behavior coverage on suppression (200 + header, no new row), genuine create (201), no-suppress-across-severity, no-suppress-when-inactive, and outside-window create.",
+    ">=90% line coverage on changed service/repository/controller code per coding-standards."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

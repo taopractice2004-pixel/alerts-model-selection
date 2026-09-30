@@ -1,0 +1,76 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "jira_id": "ALERT-412",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add read-only GET /api/alerts/trends?days=N (default 7, min 1, max 90) returning exactly N UTC calendar-day buckets oldest-first for the last N days, each with a total alert-creation count and a per-severity breakdown (Low/Medium/High/Critical) including zero-count days and severities; invalid days returns 400 ValidationProblemDetails. Backend-only, no schema change.",
+  "scope_anchors": [
+    "GET /api/alerts/trends?days=N (default 7, min 1, max 90; oldest-first UTC calendar-day buckets; per-day total + per-severity counts including zeros)",
+    "AlertsController.GetTrends ([HttpGet(\"trends\")])",
+    "IAlertService.GetTrendsAsync / AlertManagementService.GetTrendsAsync (build contiguous oldest-first N-day range, zero-fill missing days/severities)",
+    "IAlertRepository / AlertRepository (grouped daily creation counts by severity over a UTC date range)",
+    "New DTOs: AlertTrendQueryRequest (days validation) + AlertTrendResponse / AlertTrendDayResponse (per-day buckets reusing AlertSeverityCountsResponse)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs (new GetTrends action; ProducesResponseType 200 + ValidationProblemDetails 400)",
+    "AlertService.API/Services/AlertManagementService.cs (GetTrendsAsync: TimeProvider reference day, build oldest-first day range, zero-fill missing days/severities)",
+    "AlertService.API/Services/IAlertService.cs (GetTrendsAsync contract)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs (server-side GroupBy on CreatedDate.Date + Severity over range, AsNoTracking, no SELECT *)",
+    "AlertService.DTO/Requests/AlertTrendQueryRequest.cs (NEW: int Days = 7 with [Range(1,90)])"
+  ],
+  "exact_source_files_extended": [
+    "AlertService.Data/Interfaces/IAlertRepository.cs (new daily-counts-by-severity contract)",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs (NEW: ordered oldest-first day buckets)",
+    "AlertService.DTO/Responses/AlertTrendDayResponse.cs (NEW: UTC date + total + AlertSeverityCountsResponse, reusing existing severity counts DTO)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs"
+  ],
+  "selected_standards": [
+    "coding-standards.md",
+    "backend-dotnet-standards.md",
+    "api-rest-standards.md",
+    "service-architecture-standards.md",
+    "database-standards.md"
+  ],
+  "constraints": [
+    "days is a [FromQuery] param: default 7, min 1, max 90. Out-of-range or non-numeric input MUST return 400 ValidationProblemDetails via DataAnnotations [Range] + model binding, mirroring AlertQueryRequest (non-numeric binding failure already yields 400/ValidationProblemDetails).",
+    "Response has exactly N buckets, one per UTC calendar day, OLDEST FIRST. Window = UTC today back through today-(N-1) inclusive (N days including today).",
+    "DECISION: Reference 'today' comes from the injected TimeProvider.GetUtcNow() for deterministic/testable time; do NOT use DateTime.UtcNow directly in the service.",
+    "Bucketing by UTC calendar day = CreatedDate.Date (dates stored UTC). Every day in range appears even with zero alerts; every severity appears per day even when zero.",
+    "DECISION: Severity ordering mirrors the summary endpoint (Low, Medium, High, Critical); reuse AlertSeverityCountsResponse for per-day severity counts.",
+    "DECISION: Repository does server-side GroupBy on date + severity, AsNoTracking, no SELECT *, and returns raw grouped counts only. Zero-fill of missing days/severities happens in the SERVICE layer so the full contiguous oldest-first range logic is testable without a DB.",
+    "Keep EF/LINQ out of the controller and out of service business rules except the pure range/zero-fill assembly; DB grouping stays in the repository per service-architecture standards.",
+    "DECISION: Counting basis is CreatedDate (alert-creation volume) regardless of IsActive, per the story wording 'alert-creation counts'.",
+    "No schema/migration change, no auth change, backend-only (no UI)."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Behavior coverage on default (7 buckets), boundary days (1 and 90), invalid days (0, 91, non-numeric -> 400), oldest-first ordering, zero-fill of empty days and empty severities, and severity ordering matching the summary endpoint.",
+    ">=90% line coverage on changed controller/service/repository code per coding-standards."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

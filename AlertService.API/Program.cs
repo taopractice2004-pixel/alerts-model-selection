@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AlertService.API.Configuration;
 using AlertService.API.Extensions;
 using AlertService.API.Middleware;
 using AlertService.API.Services;
@@ -36,6 +37,8 @@ try
     builder.Services.AddSqlDataAccess(builder.Configuration);   // DbContext + repositories
     builder.Services.AddAlertHealthChecks();
     builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.Configure<DuplicateSuppressionOptions>(
+        builder.Configuration.GetSection(DuplicateSuppressionOptions.SectionName));
     builder.Services.AddScoped<IAlertService, AlertManagementService>();
 
     var app = builder.Build();

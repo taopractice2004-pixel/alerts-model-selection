@@ -1,0 +1,88 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "jira_id": "ALERT-410",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add free-form Tag concept with many-to-many to Alert; add/remove tag endpoints, optional tag filter on GET /api/alerts, and expose tags in AlertResponse.",
+  "scope_anchors": [
+    "POST /api/alerts/{id}/tags",
+    "DELETE /api/alerts/{id}/tags/{tag}",
+    "GET /api/alerts (add optional tag filter)",
+    "AlertsController",
+    "AlertManagementService / IAlertService",
+    "IAlertRepository / AlertRepository",
+    "AlertDbContext (new AlertTags join)",
+    "Tag entity + EF migration"
+  ],
+  "exact_source_files": [
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.Models/AlertTag.cs (new explicit join entity)",
+    "AlertService.Models/Alert.cs (add AlertTags navigation)",
+    "AlertService.API/Controllers/AlertsController.cs (add tag endpoints + tag query passthrough)",
+    "AlertService.API/Services/AlertManagementService.cs (+ IAlertService.cs tag operations)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs (+ IAlertRepository.cs tag persistence & filter)"
+  ],
+  "exact_source_files_extended": [
+    "AlertService.DTO/Responses/AlertResponse.cs (add Tags)",
+    "AlertService.DTO/Requests/AddTagsRequest.cs (new)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs (add Tag filter)",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (map Tags)",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs (new)",
+    "AlertService.Data.SQL/Configurations/AlertTagConfiguration.cs (new join mapping; AlertConfiguration.cs left unchanged)",
+    "AlertService.Data.SQL/AlertDbContext.cs (DbSet<Tag>, DbSet<AlertTag>)",
+    "AlertService.Data.SQL/Migrations/20260930031525_AddAlertTags.cs (new EF migration)",
+    "AlertService.Common/Constants/AlertConstants.cs (tag length/count constants)",
+    "database/02_AlertServiceDb_Migrations.sql (regenerated idempotent migration SQL)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.API/Services/IAlertService.cs"
+  ],
+  "selected_standards": [
+    "coding-standards.md",
+    "backend-dotnet-standards.md",
+    "api-rest-standards.md",
+    "service-architecture-standards.md",
+    "database-standards.md"
+  ],
+  "constraints": [
+    "Max 10 tags per alert; each tag name 1-30 chars, non-whitespace.",
+    "Dedupe case-insensitively within an alert; reuse an existing Tag row (case-insensitive match) rather than creating duplicates.",
+    "DECISION: AlertResponse.Tags is List<string> of tag names, ordered ascending for deterministic output.",
+    "DECISION: Explicit join entity AlertTag (table AlertTags) per database-standards; PK on (AlertId, TagId); FK_AlertTags_Alerts, FK_AlertTags_Tags; unique IX_Tags_Name (SQL default CI collation gives case-insensitive uniqueness).",
+    "DECISION: Store Tag.Name as first-seen casing; matching/dedupe is case-insensitive.",
+    "POST returns updated AlertResponse (200) or 404 if alert missing; validation errors as RFC7807 (400).",
+    "DELETE returns 404 if the alert or the tag assignment does not exist; 204/200 on success.",
+    "GET tag filter composable with isActive, severity, date range, search; case-insensitive match.",
+    "Keep DB out of controller; route persistence through service -> repository (no EF in API business logic).",
+    "No SELECT *; eager-load Tags via Include for read paths that expose tags."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Behavior coverage on tag add (dedupe, max-10, length bounds), tag remove (404 paths), and tag filter composition on GET.",
+    ">=90% line coverage on changed service/repository/mapping code per coding-standards."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

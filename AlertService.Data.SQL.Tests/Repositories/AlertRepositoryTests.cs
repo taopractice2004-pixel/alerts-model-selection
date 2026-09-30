@@ -355,4 +355,140 @@ public class AlertRepositoryTests : IDisposable
 
         Assert.False(await _context.Alerts.AnyAsync());
     }
+
+    [Fact]
+    public async Task AddTagsAsync_LinksTags_AndGetByIdAsyncEagerLoadsThem()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+
+        await _repository.AddTagsAsync(alert, new[] { "prod", "db" });
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+        var tagNames = reloaded!.AlertTags.Select(at => at.Tag.Name).OrderBy(n => n).ToArray();
+        Assert.Equal(new[] { "db", "prod" }, tagNames);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_ReusesExistingTagRow_CaseInsensitively_WithFirstSeenCasing()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        await _repository.AddTagsAsync(first, new[] { "Prod" });
+
+        var second = await _repository.AddAsync(NewAlert("Second"));
+        var trackedSecond = await _repository.GetByIdAsync(second.Id);
+        await _repository.AddTagsAsync(trackedSecond!, new[] { "prod" });
+
+        var tags = await _context.Tags.ToListAsync();
+        Assert.Single(tags);
+        Assert.Equal("Prod", tags[0].Name);
+        Assert.Equal(2, await _context.AlertTags.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_ReturnsOnlyMatchingAlerts_CaseInsensitively()
+    {
+        var tagged = await _repository.AddAsync(NewAlert("Tagged", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddTagsAsync(tagged, new[] { "Prod" });
+        await _repository.AddAsync(NewAlert("Untagged", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+        _context.ChangeTracker.Clear();
+        var result = await _repository.GetAllAsync(tag: "prod");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("Tagged", result.Items[0].Title);
+        Assert.Contains(result.Items[0].AlertTags, at => at.Tag.Name == "Prod");
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenPresent_RemovesLink_AndReturnsTrue()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert, new[] { "prod", "db" });
+
+        _context.ChangeTracker.Clear();
+        var tracked = await _repository.GetByIdAsync(alert.Id);
+        var removed = await _repository.RemoveTagAsync(tracked!, "PROD");
+
+        Assert.True(removed);
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+        Assert.Equal(new[] { "db" }, reloaded!.AlertTags.Select(at => at.Tag.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAbsent_ReturnsFalse()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert, new[] { "prod" });
+
+        _context.ChangeTracker.Clear();
+        var tracked = await _repository.GetByIdAsync(alert.Id);
+        var removed = await _repository.RemoveTagAsync(tracked!, "db");
+
+        Assert.False(removed);
+        Assert.Equal(1, await _context.AlertTags.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetDailyCountsBySeverityAsync_GroupsByUtcDayAndSeverity_WithinHalfOpenRange()
+    {
+        // Two alerts on the same day but different severities, plus a second day.
+        await _repository.AddAsync(NewAlert("Low #1", Severity.Low, new DateTime(2026, 8, 30, 3, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Low #2", Severity.Low, new DateTime(2026, 8, 30, 20, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("High #1", Severity.High, new DateTime(2026, 8, 30, 9, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Critical #1", Severity.Critical, new DateTime(2026, 8, 31, 1, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailyCountsBySeverityAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(3, result.Count);
+        Assert.Contains(result, r => r.Date == new DateTime(2026, 8, 30) && r.Severity == Severity.Low && r.Count == 2);
+        Assert.Contains(result, r => r.Date == new DateTime(2026, 8, 30) && r.Severity == Severity.High && r.Count == 1);
+        Assert.Contains(result, r => r.Date == new DateTime(2026, 8, 31) && r.Severity == Severity.Critical && r.Count == 1);
+    }
+
+    [Fact]
+    public async Task GetDailyCountsBySeverityAsync_ExcludesAlertsOutsideRange()
+    {
+        // toExclusive is half-open: an alert at exactly the upper bound is excluded.
+        await _repository.AddAsync(NewAlert("Before", Severity.Low, new DateTime(2026, 8, 29, 23, 59, 59, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("In range", Severity.Medium, new DateTime(2026, 8, 30, 12, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("At upper bound", Severity.High, new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailyCountsBySeverityAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Single(result);
+        Assert.Equal(new DateTime(2026, 8, 30), result[0].Date);
+        Assert.Equal(Severity.Medium, result[0].Severity);
+        Assert.Equal(1, result[0].Count);
+    }
+
+    [Fact]
+    public async Task GetDailyCountsBySeverityAsync_CountsRegardlessOfIsActive()
+    {
+        await _repository.AddAsync(NewAlert("Active", Severity.Low, new DateTime(2026, 8, 30, 5, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Inactive", Severity.Low, new DateTime(2026, 8, 30, 6, 0, 0, DateTimeKind.Utc), isActive: false));
+
+        var result = await _repository.GetDailyCountsBySeverityAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Single(result);
+        Assert.Equal(2, result[0].Count);
+    }
+
+    [Fact]
+    public async Task GetDailyCountsBySeverityAsync_WhenNoAlerts_ReturnsEmpty()
+    {
+        var result = await _repository.GetDailyCountsBySeverityAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Empty(result);
+    }
 }
