@@ -36,6 +36,8 @@ try
     builder.Services.AddSqlDataAccess(builder.Configuration);   // DbContext + repositories
     builder.Services.AddAlertHealthChecks();
     builder.Services.AddSingleton(TimeProvider.System);
+    // Bind Alert deduplication options
+    builder.Services.Configure<AlertService.API.Configurations.AlertDeduplicationOptions>(builder.Configuration.GetSection("AlertDeduplication"));
     builder.Services.AddScoped<IAlertService, AlertManagementService>();
 
     var app = builder.Build();

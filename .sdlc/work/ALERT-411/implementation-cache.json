@@ -1,0 +1,50 @@
+{
+  "jira": "ALERT-411",
+  "title": "Duplicate Alert Suppression Window",
+  "scopeAnchors": [
+    "POST /api/alerts",
+    "AlertService.API.Controllers.AlertsController.Create",
+    "AlertService.API.Services.AlertManagementService.CreateAsync"
+  ],
+  "sourceFiles": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "testFiles": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs"
+  ],
+  "buildCommands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj"
+  ],
+  "selectedStandards": [
+    "standards/api-rest-standards.md",
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/service-architecture-standards.md"
+  ],
+  "validationCommands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter Category!=Integration"
+  ],
+  "reproduction": {
+    "exampleRequest": "POST /api/alerts with JSON { Title, Description, Severity }",
+    "expected": "If duplicate suppressed: 200 OK with header X-Duplicate-Suppressed: true and existing alert body; otherwise 201 Created"
+  },
+  "unresolvedQuestions": [],
+  "implementationCompleted": true,
+  "touchedFiles": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Configurations/AlertDeduplicationOptions.cs",
+    "AlertService.API/appsettings.json",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Responses/CreateAlertResult.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs"
+  ]
+}

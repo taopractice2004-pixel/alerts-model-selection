@@ -18,4 +18,7 @@ public class Alert
     public DateTime CreatedDate { get; set; }
 
     public bool IsActive { get; set; }
+    
+    // Many-to-many relationship with Tag
+    public ICollection<Tag> Tags { get; set; } = new List<Tag>();
 }

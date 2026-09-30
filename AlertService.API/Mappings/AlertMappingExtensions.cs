@@ -19,6 +19,19 @@ public static class AlertMappingExtensions
         IsActive = alert.IsActive
     };
 
+    public static AlertResponse ToResponseWithTags(this Alert alert)
+    {
+        var resp = alert.ToResponse();
+        if (alert.Tags != null && alert.Tags.Any())
+        {
+            resp.Tags = alert.Tags.Select(t => t.Name)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return resp;
+    }
+
     public static Alert ToEntity(this CreateAlertRequest request, DateTime createdDateUtc) => new()
     {
         Title = request.Title.Trim(),

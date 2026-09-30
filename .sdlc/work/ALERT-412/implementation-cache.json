@@ -1,0 +1,39 @@
+{
+  "jiraId": "ALERT-412",
+  "jiraProject": "alert",
+  "classification": "SIMPLE",
+  "scopeAnchors": {
+    "route": "GET /api/alerts/trends?days=N",
+    "controllerAction": "AlertsController.GetTrends",
+    "serviceMethod": "IAlertService.GetTrendsAsync / AlertManagementService.GetTrendsAsync",
+    "repositoryMethod": "IAlertRepository.GetTrendsAsync / AlertRepository.GetTrendsAsync",
+    "dto": "AlertTrendsResponse, DailyAlertTrendResponse (uses AlertSeverityCountsResponse)"
+  },
+  "exactSourceFiles": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Responses/AlertTrendsResponse.cs"
+  ],
+  "exactTestFiles": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs"
+  ],
+  "selectedStandards": [
+    "standards/api-rest-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/coding-standards.md"
+  ],
+  "validationAndReproduction": {
+    "build": "dotnet build AlertService.sln",
+    "tests": "dotnet test AlertService.sln --no-build"
+  },
+  "unresolvedQuestions": [],
+  "notes": [
+    "Use UTC calendar days (DateTime.UtcNow.Date) when constructing day buckets.",
+    "Controller should use [ApiController] model validation for invalid 'days' to return ValidationProblemDetails.",
+    "Severity ordering follows AlertSeverityCountsResponse (Low, Medium, High, Critical)."
+  ]
+}

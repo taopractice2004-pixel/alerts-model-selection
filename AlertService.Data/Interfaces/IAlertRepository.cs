@@ -15,6 +15,7 @@ public interface IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = "createdDate",
         string sortDirection = "desc",
         int page = 1,
@@ -26,9 +27,17 @@ public interface IAlertRepository
 
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<Alert?> AddTagsAsync(int alertId, IEnumerable<string> tags, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default);
+
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task<Alert?> FindActiveByTitleAndSeveritySinceAsync(string title, AlertService.Common.Enums.Severity severity, DateTime since, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DailyAlertTrend>> GetTrendsAsync(int days, CancellationToken cancellationToken = default);
 }

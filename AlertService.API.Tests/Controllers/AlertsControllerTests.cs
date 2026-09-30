@@ -212,7 +212,7 @@ public class AlertsControllerTests
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertService.DTO.Responses.CreateAlertResult { Alert = SampleResponse(5), Suppressed = false, IsNew = true });
 
         var result = await _controller.Create(request, CancellationToken.None);
 

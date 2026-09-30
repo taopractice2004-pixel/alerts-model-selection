@@ -1,0 +1,47 @@
+{
+  "repository": "AlertService",
+  "generatedAt": "2026-09-30T00:00:00Z",
+  "mode": "MODE_C_EXISTING_PROJECT",
+  "filesCreated": [
+    ".sdlc/context/repo-profile.md",
+    ".sdlc/context/repository-map.md",
+    ".sdlc/context/project-docs-index.md",
+    ".sdlc/context/standards-summary.md",
+    ".sdlc/context/context-manifest.json"
+  ],
+  "notes": {
+    "standards": "Imported summaries from standards/",
+    "unknowns": "CI workflows and secret management locations: TO_BE_DISCOVERED"
+  }
+}
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context-not-yet-run",
+  "generatedAtUtc": null,
+  "repositoryMode": "TO_BE_DISCOVERED",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "TO_BE_DISCOVERED",
+    "language": "TO_BE_DISCOVERED",
+    "platformOrRuntime": "TO_BE_DISCOVERED",
+    "applicationType": "TO_BE_DISCOVERED",
+    "dataStore": "TO_BE_DISCOVERED",
+    "testFrameworks": [],
+    "buildCommand": "TO_BE_DISCOVERED",
+    "testCommand": "TO_BE_DISCOVERED",
+    "runCommand": "TO_BE_DISCOVERED"
+  },
+  "sourceInputs": {
+    "rootDocs": [],
+    "buildFiles": [],
+    "standards": [],
+    "sampleSource": []
+  },
+  "notes": "Starter manifest for the current compact pipeline. After copying this package into a real repository, run /setup-repo-context before /analyze-story, /fix-bugs, or /unit-testing. Run /refresh-repo-context later only when repository context changes materially."
+}

@@ -1,0 +1,116 @@
+{
+  "jiraId": "ALERT-410",
+  "jiraSpace": "alert",
+  "classification": "SIMPLE",
+  "deterministicPrepass": {
+    "touchedLayers": ["API", "Service", "Domain/Models", "Data/EF-Core", "Mappings/DTOs"],
+    "scopeAnchors": [
+      "POST /api/alerts/{id}/tags",
+      "DELETE /api/alerts/{id}/tags/{tag}",
+      "GET /api/alerts?tag=...",
+      "AlertResponse.tags"
+    ]
+  },
+  "exactSourceFiles": [
+    "AlertService.Models/Alert.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs"
+  ],
+  "exactTestFiles": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs"
+  ],
+  "selectedStandards": [
+    "standards/api-rest-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/coding-standards.md"
+  ],
+  "validationCommands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "unresolvedQuestions": [
+    "There are existing controller actions and logs referencing AddTags/RemoveTag — confirm whether these endpoints are stubs, partially implemented, or should be replaced.",
+    "DB naming conventions for join table and Tag column (schema naming) — prefer existing conventions from migrations/AlertDbContextModelSnapshot.",
+    "Confirm whether tags should be trimmed/normalized beyond lower-casing for dedupe (e.g., collapse whitespace).",
+    "Decide whether tag filtering is exact match or case-insensitive match and whether multiple `tag` query params are supported (currently plan: single tag exact, case-insensitive)."
+  ],
+  "notes": "Keep exactSourceFiles and exactTestFiles to smallest useful set (max limits respected)."
+  ,"actualTouchedFiles": [
+    "AlertService.Models/Tag.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.DTO/Requests/AlertTagRequest.cs",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ]
+}
+{
+  "schema_version": 1,
+  "work_item": "ALERT-410",
+  "tracker_project": "alert",
+  "title": "Alert Tagging",
+  "classification": "AMBIGUOUS",
+  "effort_mode": "low",
+  "scope_anchors": [
+    "Alert <-> Tag many-to-many relationship and join table",
+    "POST /api/alerts/{id}/tags bulk assignment with case-insensitive deduplication, max 10 tags per alert, and 1-30 character tags",
+    "DELETE /api/alerts/{id}/tags/{tag} with 404 for missing alert or assignment",
+    "GET /api/alerts?tag=... composed with existing alert filters",
+    "AlertResponse includes tags"
+  ],
+  "exact_source_files": [
+    "AlertService.Models/Alert.cs and AlertService.Models/Tag.cs (domain anchor)",
+    "AlertService.DTO/Requests/AlertTagRequest.cs, AlertService.DTO/Requests/AlertQueryRequest.cs, and AlertService.DTO/Responses/AlertResponse.cs (API contracts)",
+    "AlertService.API/Controllers/AlertsController.cs (tag routes)",
+    "AlertService.API/Services/AlertManagementService.cs and AlertService.API/Services/IAlertService.cs (orchestration contract)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs and AlertService.Data/Interfaces/IAlertRepository.cs (query/mutation persistence boundary)"
+  ],
+  "adjacent_required_files": [
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs and AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/20260930093943_AlertTagging.cs and AlertDbContextModelSnapshot.cs",
+    "database/02_AlertServiceDb_Migrations.sql"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests --filter FullyQualifiedName~Alert",
+    "dotnet test AlertService.Data.SQL.Tests --filter FullyQualifiedName~Alert"
+  ],
+  "coverage_command": "NOT_CONFIGURED",
+  "reproduction_command": "NOT_RUN",
+  "missing_facts": [
+    "RESOLVED: tag assignment request is { tags: [string, ...] }",
+    "RESOLVED: tag values are trimmed; first-seen casing is preserved; responses are alphabetically ordered case-insensitively",
+    "RESOLVED: duplicate input and already-assigned values are ignored (idempotent success)",
+    "RESOLVED: DELETE tag matching is case-insensitive and URL-decoded by ASP.NET Core",
+    "RESOLVED: invalid tag payloads and per-alert limit violations return 400 with validation/problem details",
+    "RESOLVED: Tag rows are globally shared and reused by normalized case-insensitive name"
+  ],
+  "known_validation_constraint": "Do not use unrestricted dotnet test as the primary signal; cached repository context identifies unrelated ALERT-411/ALERT-412 integration expectations absent from current API source."
+}

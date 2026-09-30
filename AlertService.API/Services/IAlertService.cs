@@ -12,9 +12,15 @@ public interface IAlertService
 
     Task<AlertResponse?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<AlertResponse?> AddTagsAsync(int id, IEnumerable<string> tags, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
+
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    Task<AlertService.DTO.Responses.AlertTrendsResponse> GetTrendsAsync(int days, CancellationToken cancellationToken = default);
+
+    Task<AlertService.DTO.Responses.CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);

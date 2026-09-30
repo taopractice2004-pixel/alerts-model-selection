@@ -38,5 +38,11 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .IsRequired();
 
         builder.HasIndex(a => a.IsActive);
+
+        // Configure many-to-many with Tag using default join table name AlertTag
+        builder
+            .HasMany(a => a.Tags)
+            .WithMany(t => t.Alerts)
+            .UsingEntity<Dictionary<string, object>>("AlertTag");
     }
 }
