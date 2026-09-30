@@ -1,0 +1,99 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "jira_id": "ALERT-410",
+  "jira_space": "ALERT",
+  "story_case": "AMBIGUOUS",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add many-to-many alert tags, assignment/removal endpoints, tag filtering, and response tags.",
+  "scope_anchors": [
+    "api/alerts",
+    "AlertsController.GetAll",
+    "AlertManagementService.GetAllAsync",
+    "IAlertRepository.GetAllAsync",
+    "AlertRepository.GetAllAsync",
+    "AlertMappingExtensions.ToResponse",
+    "Alert entity and AlertDbContext",
+    "AlertQueryRequest and AlertResponse"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/20260930090137_AddAlertTags.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.DTO/Requests/AlertTagsRequest.cs (new; exact name TO_BE_DISCOVERED)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data.SQL/Configurations (new Tag configuration if required)",
+    "database/02_AlertServiceDb_Migrations.sql (script update depends on clarification)",
+    "AlertService.API.Tests test doubles and service interface consumers"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "constraints": [
+    "Keep controller -> service -> repository layering and async behavior.",
+    "Deduplicate submitted tags case-insensitively before enforcing the maximum of 10 unique tags per alert.",
+    "Validate each tag at the trust boundary for 1-30 characters.",
+    "Preserve existing pagination, filters, sorting, error middleware, and response mapping conventions.",
+    "Full dotnet test includes unrelated ALERT-411/ALERT-412 expectations; use focused filters.",
+    "Local migration validation may encounter an existing Tags database object."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter FullyQualifiedName~AlertsControllerTests",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter FullyQualifiedName~AlertManagementServiceTests",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter FullyQualifiedName~AlertRepositoryTests"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "POST assigns multiple tags and deduplicates case-insensitively.",
+    "POST rejects tags outside 1-30 characters and more than 10 unique tags.",
+    "DELETE removes assignments and returns 404 for a missing alert or assignment.",
+    "GET tag filtering composes with active, severity, date range, and title search filters.",
+    "Alert responses include tags and persistence uses the many-to-many join table."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "Exact new tag request/entity/configuration file naming convention is not yet established.",
+    "Required AlertResponse tag representation is unspecified.",
+    "Whether stored tag casing preserves first submission casing is unspecified.",
+    "Whether reassigning an already-assigned tag is idempotent or returns a conflict is unspecified.",
+    "Whether the ten-tag limit is evaluated after unique normalized tags is an assumption.",
+    "Whether database/02_AlertServiceDb_Migrations.sql must be updated is unspecified."
+  ],
+  "unresolved_questions": [
+    "Should AlertResponse.Tags be a string collection or tag DTO objects?",
+    "Should POST be idempotent for already-assigned tags, or return a conflict?",
+    "Should tag storage preserve submitted casing while comparisons remain case-insensitive?",
+    "Does DELETE match tag values case-insensitively?",
+    "Must the standalone SQL migration script be updated alongside the EF migration?"
+  ]
+}

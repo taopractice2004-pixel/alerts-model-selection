@@ -1,0 +1,75 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "jira_id": "ALERT-411",
+  "jira_space": "ALERT",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Suppress active near-duplicate alerts for a configurable time window.",
+  "scope_anchors": [
+    "POST /api/alerts",
+    "AlertsController.Create",
+    "IAlertService.CreateAsync",
+    "AlertManagementService.CreateAsync",
+    "IAlertRepository duplicate lookup",
+    "AlertRepository SQL/EF query",
+    "Alerts:DuplicateSuppressionWindowMinutes configuration"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs for existing TimeProvider and service composition",
+    "AlertService.API/appsettings.Development.json for environment override review",
+    "AlertService.API.Tests test doubles and IAlertService consumers"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "constraints": [
+    "Use UTC timestamps from the existing TimeProvider path; do not hardcode the suppression duration.",
+    "Compare Title case-insensitively, Severity exactly, IsActive true, and CreatedDate within the configured minutes.",
+    "Return the existing alert and X-Duplicate-Suppressed: true with 200 OK when suppressed; preserve 201 Created for new alerts.",
+    "Keep controller -> service -> repository layering and async cancellation behavior.",
+    "No schema change is expected; review query shape and existing SQL/EF conventions.",
+    "Full dotnet test may include unrelated ALERT-411/ALERT-412 integration expectations; use focused commands while implementing this slice."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter FullyQualifiedName~AlertsControllerTests",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter FullyQualifiedName~AlertManagementServiceTests",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter FullyQualifiedName~AlertRepositoryTests"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Suppresses a matching active alert within the configured window and returns the existing response/header.",
+    "Creates a new alert for inactive, different-severity, case-insensitive-nonmatching-title, and expired matches.",
+    "Preserves 201 Created behavior for genuinely new alerts and validates configuration usage."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

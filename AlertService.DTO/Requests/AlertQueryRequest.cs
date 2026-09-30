@@ -30,6 +30,8 @@ public class AlertQueryRequest : IValidatableObject
     [StringLength(AlertConstants.SearchMaxLength)]
     public string? Search { get; set; }
 
+    public string? Tags { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CreatedFrom.HasValue && CreatedTo.HasValue && CreatedFrom.Value > CreatedTo.Value)
@@ -37,6 +39,18 @@ public class AlertQueryRequest : IValidatableObject
             yield return new ValidationResult(
                 "CreatedFrom must be less than or equal to CreatedTo.",
                 new[] { nameof(CreatedFrom), nameof(CreatedTo) });
+        }
+
+        if (!string.IsNullOrWhiteSpace(Tags))
+        {
+            var tags = Tags.Split(',', StringSplitOptions.None)
+                .Select(tag => tag.Trim())
+                .ToList();
+
+            if (tags.Any(tag => tag.Length is < 1 or > 30))
+            {
+                yield return new ValidationResult("Each tag must be between 1 and 30 characters.", new[] { nameof(Tags) });
+            }
         }
     }
 }

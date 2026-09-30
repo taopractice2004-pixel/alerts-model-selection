@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context-complete",
+  "generatedAtUtc": "2026-09-30T08:44:36Z",
+  "repositoryMode": "MODE_C_EXISTING_PROJECT",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "AlertService.API/Program.cs",
+    "language": "C#",
+    "platformOrRuntime": ".NET 8 / ASP.NET Core",
+    "applicationType": "REST API microservice",
+    "dataStore": "SQL Server via EF Core 8",
+    "testFrameworks": ["xUnit", "Moq", "ASP.NET Core MVC testing", "EF Core InMemory", "EF Core SQLite"],
+    "buildCommand": "dotnet build AlertService.sln",
+    "testCommand": "dotnet test",
+    "runCommand": "dotnet run --project AlertService.API --launch-profile https"
+  },
+  "sourceInputs": {
+    "rootDocs": ["README.md", "AlertService.sln", ".gitignore"],
+    "buildFiles": ["Directory.Build.props", "dotnet-tools.json", "*.csproj", "AlertService.API/Properties/launchSettings.json"],
+    "standards": ["standards/*.md"],
+    "sampleSource": ["AlertService.API/Program.cs", "AlertService.API/Controllers/AlertsController.cs", "AlertService.API/Services/AlertManagementService.cs", "AlertService.Data/Interfaces/IAlertRepository.cs", "AlertService.Data.SQL/Repositories/AlertRepository.cs"]
+  },
+  "notes": "Repository cache created from the existing solution, README, project files, startup/API/service/data boundaries, tests, and all standards files. CI/CD, deployment runbook, committed OpenAPI contract, and lint/format command are NOT_AVAILABLE or NOT_CONFIGURED."
+}

@@ -1,0 +1,91 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "jira_id": "ALERT-412",
+  "jira_space": "NOT_PROVIDED",
+  "story_case": "AMBIGUOUS",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add a daily UTC alert-creation trend endpoint with counts by severity.",
+  "scope_anchors": [
+    "GET /api/alerts/trends",
+    "days query parameter: default 7, minimum 1, maximum 90",
+    "UTC calendar-day bucket generation and oldest-first ordering",
+    "zero-count days and Low/Medium/High/Critical severity fields",
+    "ValidationProblemDetails for invalid days"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.DTO/Requests/AlertTrendRequest.cs",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs"
+  ],
+  "exact_source_files_note": "Seven files are required because this story adds both request and response contracts in addition to the existing five-layer endpoint path; this is a genuinely broader slice than the compact default.",
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Common/Enums/Severity.cs for Low, Medium, High, Critical ordering",
+    "AlertService.API/Program.cs for TimeProvider registration and service composition",
+    "AlertService.DTO/Responses/AlertSummaryResponse.cs and AlertSeverityCountsResponse.cs for response conventions",
+    "AlertService.Models/Alert.cs for CreatedDate and Severity persistence fields"
+  ],
+  "selected_standards": [
+    "standards/coding-standards.md",
+    "standards/backend-dotnet-standards.md",
+    "standards/api-rest-standards.md",
+    "standards/service-architecture-standards.md",
+    "standards/database-standards.md"
+  ],
+  "constraints": [
+    "Keep controller -> service -> repository layering and async cancellation behavior.",
+    "Use UTC boundaries from the existing TimeProvider path; do not use local machine time.",
+    "Use set-based, parameterized EF/SQL aggregation over the CreatedDate range and review index implications.",
+    "Use existing Severity ordering and response naming conventions: Low, Medium, High, Critical.",
+    "Let ASP.NET Core query model validation produce the existing ValidationProblemDetails shape.",
+    "No schema or migration change is expected unless implementation evidence disproves this.",
+    "Full dotnet test may include unrelated ALERT-411/ALERT-412 integration expectations; use focused commands while implementing this slice."
+  ],
+  "assumptions": [
+    "Unless product confirms otherwise, last N days includes today: UTC range [today - (N - 1) days, tomorrow).",
+    "Unless product confirms otherwise, each bucket exposes an ISO yyyy-MM-dd calendar date field.",
+    "Missing dates and severities are materialized by the service as zeroes, while the repository returns grouped existing rows."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter FullyQualifiedName~AlertsControllerTests",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter FullyQualifiedName~AlertManagementServiceTests",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter FullyQualifiedName~AlertRepositoryTests"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Default days is 7; values 1 and 90 are accepted; 0, 91, and non-numeric input produce 400 ValidationProblemDetails.",
+    "UTC boundary dates are included/excluded correctly and buckets are oldest first.",
+    "Empty days and missing severities are returned with zero counts.",
+    "Mixed alerts map to correct total and Low/Medium/High/Critical daily counts."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "Jira project/space was not provided.",
+    "Product confirmation of whether the current UTC day is included is missing.",
+    "Product confirmation of the trend bucket date representation is missing."
+  ],
+  "unresolved_questions": [
+    "What Jira project/space owns ALERT-412?",
+    "Does last N days include the current UTC day?",
+    "What exact date representation should the response contract expose?"
+  ]
+}
