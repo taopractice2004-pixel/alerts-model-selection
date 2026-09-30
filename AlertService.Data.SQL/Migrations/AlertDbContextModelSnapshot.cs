@@ -56,6 +56,59 @@ namespace AlertService.Data.SQL.Migrations
 
                     b.ToTable("Alerts", (string)null);
                 });
+
+            modelBuilder.Entity("AlertService.Models.Tag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertTags", b =>
+                {
+                    b.Property<int>("AlertId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AlertId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("AlertTags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertTags", b =>
+                {
+                    b.HasOne("AlertService.Models.Alert", null)
+                        .WithMany()
+                        .HasForeignKey("AlertId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_AlertTags_Alerts_AlertId");
+
+                    b.HasOne("AlertService.Models.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_AlertTags_Tags_TagId");
+                });
 #pragma warning restore 612, 618
         }
     }

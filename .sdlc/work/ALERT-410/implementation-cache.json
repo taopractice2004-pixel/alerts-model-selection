@@ -1,0 +1,86 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "jira_id": "ALERT-410",
+  "jira_space": "NOT_PROVIDED",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Attach multiple free-form tags to an alert (new Tag entity, many-to-many join table/migration), add/remove tag endpoints, tag query filter on GET /api/alerts, Tags included in AlertResponse.",
+  "scope_anchors": [
+    "AlertsController: POST /api/alerts/{id}/tags",
+    "AlertsController: DELETE /api/alerts/{id}/tags/{tag}",
+    "AlertsController: GET /api/alerts tag query param",
+    "IAlertService / AlertManagementService: add/remove tag methods",
+    "Alert entity + new Tag entity many-to-many",
+    "IAlertRepository / AlertRepository: tag filter + tag mutation",
+    "AlertDbContext + new migration"
+  ],
+  "exact_source_files": [
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/20260930055414_AddTagsAndAlertTags.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Requests/AddTagsRequest.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/TagLimitExceededException.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data.SQL/Extensions/ServiceCollectionExtensions.cs (DI, unaffected)",
+    "database/01_CreateDatabase.sql and database/02_AlertServiceDb_Migrations.sql (idempotent script alternative to EF migration)"
+  ],
+  "selected_standards": [
+    "coding-standards.md",
+    "backend-dotnet-standards.md",
+    "api-rest-standards.md",
+    "service-architecture-standards.md",
+    "database-standards.md"
+  ],
+  "constraints": [
+    "Max 10 tags per alert; each tag 1-30 chars; dedupe case-insensitively",
+    "404 if alert or tag assignment doesn't exist on DELETE",
+    "No AutoMapper - manual mapping only in AlertMappingExtensions.cs",
+    "Follow existing nullable/not-found service-return convention (UpdateAsync/DeactivateAsync/DeleteAsync pattern)",
+    "New join table must follow database-standards.md naming (PK_, FK_, IX_, 3NF)",
+    "No existing custom-exception-to-4xx convention; max-10-tags 400 surfacing is an implementation-time decision"
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.sln --no-build",
+    "dotnet ef migrations add AddTagsAndAlertTags --project AlertService.Data.SQL --startup-project AlertService.API",
+    "dotnet ef migrations script --idempotent --project AlertService.Data.SQL --startup-project AlertService.API --output database/02_AlertServiceDb_Migrations.sql"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "behavior coverage: add tags (including dedupe/limit/length validation), remove tag (including 404 cases), GET filter by tag, response includes tags"
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "resolved_decisions": [
+    "POST /api/alerts/{id}/tags returns 200 OK with the updated AlertResponse (mutates existing resource, not a new addressable one)",
+    "Max-10-tags violation surfaced as 400 via new TagLimitExceededException caught locally in AlertsController.AddTags; global ExceptionHandlingMiddleware left unchanged"
+  ]
+}

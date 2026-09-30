@@ -1,9 +1,11 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.Common.Enums;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using AlertService.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
@@ -15,14 +17,22 @@ public class AlertManagementServiceTests
 
     private readonly Mock<IAlertRepository> _repository = new();
     private readonly Mock<TimeProvider> _timeProvider = new();
+    private readonly IConfiguration _configuration = new ConfigurationBuilder().Build();
     private readonly AlertManagementService _service;
 
     public AlertManagementServiceTests()
     {
         _timeProvider.Setup(t => t.GetUtcNow()).Returns(FixedNow);
+        _repository.Setup(r => r.FindRecentActiveDuplicateAsync(
+                It.IsAny<string>(),
+                It.IsAny<Severity>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Alert?)null);
         _service = new AlertManagementService(
             _repository.Object,
             _timeProvider.Object,
+            _configuration,
             NullLogger<AlertManagementService>.Instance);
     }
 
@@ -40,6 +50,7 @@ public class AlertManagementServiceTests
     public async Task GetAllAsync_MapsEntitiesToPagedResponse()
     {
         _repository.Setup(r => r.GetAllAsync(
+                null,
                 null,
                 null,
                 null,
@@ -75,12 +86,12 @@ public class AlertManagementServiceTests
             Page = 2,
             PageSize = 10
         };
-        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", null, "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Alert> { ExistingAlert(1) }, 11));
 
         var result = await _service.GetAllAsync(request);
 
-        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", null, "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(2, result.Page);
         Assert.Equal(10, result.PageSize);
         Assert.Equal(11, result.TotalCount);
@@ -128,6 +139,65 @@ public class AlertManagementServiceTests
     }
 
     [Fact]
+    public async Task GetTrendsAsync_ReturnsBucketsOldestFirst_WithZeroFillForMissingDaysAndSeverities()
+    {
+        // FixedNow is 2026-09-01T12:00:00Z, so a 3-day window covers 2026-08-30..2026-09-01.
+        var request = new AlertTrendsQueryRequest { Days = 3 };
+        _repository.Setup(r => r.GetTrendCountsAsync(
+                new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(DateTime Date, Severity Severity, int Count)>
+            {
+                (new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc), Severity.High, 2),
+                (new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), Severity.Critical, 1),
+                (new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), Severity.Low, 3)
+            });
+
+        var result = await _service.GetTrendsAsync(request);
+
+        Assert.Equal(3, result.Buckets.Count);
+        Assert.Equal(new DateOnly(2026, 8, 30), result.Buckets[0].Date);
+        Assert.Equal(new DateOnly(2026, 8, 31), result.Buckets[1].Date);
+        Assert.Equal(new DateOnly(2026, 9, 1), result.Buckets[2].Date);
+
+        Assert.Equal(2, result.Buckets[0].TotalCount);
+        Assert.Equal(2, result.Buckets[0].SeverityCounts.High);
+        Assert.Equal(0, result.Buckets[0].SeverityCounts.Low);
+
+        Assert.Equal(0, result.Buckets[1].TotalCount);
+        Assert.Equal(0, result.Buckets[1].SeverityCounts.Critical);
+
+        Assert.Equal(4, result.Buckets[2].TotalCount);
+        Assert.Equal(3, result.Buckets[2].SeverityCounts.Low);
+        Assert.Equal(1, result.Buckets[2].SeverityCounts.Critical);
+        Assert.Equal(0, result.Buckets[2].SeverityCounts.Medium);
+        Assert.Equal(0, result.Buckets[2].SeverityCounts.High);
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_DefaultDays_QueriesSevenDayWindowEndingToday()
+    {
+        var request = new AlertTrendsQueryRequest();
+        _repository.Setup(r => r.GetTrendCountsAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(DateTime Date, Severity Severity, int Count)>());
+
+        var result = await _service.GetTrendsAsync(request);
+
+        Assert.Equal(7, result.Buckets.Count);
+        _repository.Verify(r => r.GetTrendCountsAsync(
+            new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_NullRequest_Throws()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetTrendsAsync(null!));
+    }
+
+    [Fact]
     public async Task CreateAsync_SetsCreatedDate_TrimsInput_AndSaves()
     {
         Alert? saved = null;
@@ -149,8 +219,9 @@ public class AlertManagementServiceTests
         Assert.Equal("Service down", saved!.Title);
         Assert.Equal("Payments API", saved.Description);
         Assert.Equal(FixedNow.UtcDateTime, saved.CreatedDate);
-        Assert.Equal(10, result.Id);
-        Assert.Equal(Severity.Critical, result.Severity);
+        Assert.False(result.IsDuplicate);
+        Assert.Equal(10, result.Alert.Id);
+        Assert.Equal(Severity.Critical, result.Alert.Severity);
         _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -158,6 +229,44 @@ public class AlertManagementServiceTests
     public async Task CreateAsync_NullRequest_Throws()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(() => _service.CreateAsync(null!));
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRecentActiveDuplicateExists_ReturnsExistingAlert_AndDoesNotSave()
+    {
+        var existing = ExistingAlert(7);
+        _repository.Setup(r => r.FindRecentActiveDuplicateAsync("Memory leak", Severity.Medium, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var request = new CreateAlertRequest { Title = "  Memory leak  ", Severity = Severity.Medium };
+
+        var result = await _service.CreateAsync(request);
+
+        Assert.True(result.IsDuplicate);
+        Assert.Equal(7, result.Alert.Id);
+        _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UsesConfiguredSuppressionWindow_WhenComputingCutoff()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [AlertConstants.DuplicateSuppressionWindowMinutesConfigKey] = "30"
+            })
+            .Build();
+        var service = new AlertManagementService(_repository.Object, _timeProvider.Object, configuration, NullLogger<AlertManagementService>.Instance);
+        DateTime? capturedCutoff = null;
+        _repository.Setup(r => r.FindRecentActiveDuplicateAsync(It.IsAny<string>(), It.IsAny<Severity>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Severity, DateTime, CancellationToken>((_, _, cutoff, _) => capturedCutoff = cutoff)
+            .ReturnsAsync((Alert?)null);
+        _repository.Setup(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Alert a, CancellationToken _) => a);
+
+        await service.CreateAsync(new CreateAlertRequest { Title = "Disk full", Severity = Severity.Low });
+
+        Assert.Equal(FixedNow.UtcDateTime.AddMinutes(-30), capturedCutoff);
     }
 
     [Fact]
@@ -263,5 +372,87 @@ public class AlertManagementServiceTests
 
         Assert.False(result);
         _repository.Verify(r => r.DeleteAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenMissing_ReturnsNull()
+    {
+        _repository.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync((Alert?)null);
+
+        var result = await _service.AddTagsAsync(99, new AddTagsRequest { Tags = ["outage"] });
+
+        Assert.Null(result);
+        _repository.Verify(r => r.GetOrCreateTagsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_AddsNewTags_DedupesCaseInsensitive_AndSaves()
+    {
+        var existing = ExistingAlert();
+        existing.Tags.Add(new Tag { Id = 1, Name = "network" });
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _repository.Setup(r => r.GetOrCreateTagsAsync(
+                It.Is<IEnumerable<string>>(names => names.Count() == 1 && names.Single() == "Outage"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Tag> { new() { Id = 2, Name = "Outage" } });
+
+        var result = await _service.AddTagsAsync(1, new AddTagsRequest { Tags = ["Outage", "NETWORK"] });
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { "network", "Outage" }, result!.Tags.OrderBy(t => t, StringComparer.OrdinalIgnoreCase));
+        _repository.Verify(r => r.UpdateAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenExceedsMaxTags_ThrowsAndDoesNotSave()
+    {
+        var existing = ExistingAlert();
+        for (var i = 0; i < AlertConstants.MaxTagsPerAlert; i++)
+        {
+            existing.Tags.Add(new Tag { Id = i + 1, Name = $"tag-{i}" });
+        }
+
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+
+        await Assert.ThrowsAsync<TagLimitExceededException>(
+            () => _service.AddTagsAsync(1, new AddTagsRequest { Tags = ["one-too-many"] }));
+
+        _repository.Verify(r => r.UpdateAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAlertMissing_ReturnsNull()
+    {
+        _repository.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync((Alert?)null);
+
+        var result = await _service.RemoveTagAsync(99, "network");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenTagNotAssigned_ReturnsNull_AndDoesNotSave()
+    {
+        var existing = ExistingAlert();
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+
+        var result = await _service.RemoveTagAsync(1, "network");
+
+        Assert.Null(result);
+        _repository.Verify(r => r.UpdateAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_RemovesTag_CaseInsensitively_AndSaves()
+    {
+        var existing = ExistingAlert();
+        existing.Tags.Add(new Tag { Id = 1, Name = "network" });
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+
+        var result = await _service.RemoveTagAsync(1, "NETWORK");
+
+        Assert.NotNull(result);
+        Assert.Empty(result!.Tags);
+        _repository.Verify(r => r.UpdateAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

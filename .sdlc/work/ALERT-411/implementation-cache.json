@@ -1,0 +1,71 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "jira_id": "ALERT-411",
+  "jira_space": "NOT_PROVIDED",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate alerts on POST /api/alerts: if an active alert with the same Title (case-insensitive) and Severity was created within a configurable window (default 15 min), return 200 OK with the existing alert and header X-Duplicate-Suppressed: true instead of creating a new row; genuinely new alerts still return 201 Created.",
+  "scope_anchors": [
+    "AlertsController: POST /api/alerts (Create) response status/header",
+    "IAlertService / AlertManagementService: CreateAsync duplicate-suppression logic",
+    "IAlertRepository / AlertRepository: recent-active-duplicate lookup query",
+    "appsettings.json: configurable suppression window (minutes)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs (existing IConfiguration.GetValue<T> convention to follow, unaffected)"
+  ],
+  "selected_standards": [
+    "coding-standards.md",
+    "backend-dotnet-standards.md",
+    "api-rest-standards.md",
+    "service-architecture-standards.md",
+    "database-standards.md"
+  ],
+  "constraints": [
+    "Match on Title case-insensitive + exact Severity; must not suppress across different severities",
+    "Only an active (IsActive == true) prior alert can suppress; inactive prior alerts must not suppress",
+    "Suppression window in minutes must be read from appsettings.json, not hardcoded; default 15",
+    "Use TimeProvider (already injected) for now/cutoff computation, not DateTime.UtcNow",
+    "No IOptions<T> pattern exists in repo; follow existing direct IConfiguration.GetValue<T> convention from Program.cs",
+    "No existing mechanism for a service method to signal a secondary flag (duplicate) back to the controller; requires a minimal new wrapper - implementation-time decision",
+    "AlertResponse and DTOs stay unchanged; no schema/migration change needed"
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.sln --no-build"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "behavior coverage: suppress within window (same title/severity, active) -> 200 + header, no new row; different severity -> 201; window expired -> 201; prior alert inactive -> 201; case-insensitive title match -> suppressed"
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "Exact shape of the duplicate-signal returned from AlertManagementService.CreateAsync to AlertsController.Create (e.g. result wrapper vs tuple) - left to /implement-story",
+    "Exact config key name for the suppression window (e.g. Alerts:DuplicateSuppressionWindowMinutes) - left to /implement-story, default value must be 15"
+  ],
+  "resolved_decisions": []
+}

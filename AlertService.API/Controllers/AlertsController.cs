@@ -46,14 +46,31 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
-    /// <summary>Creates a new alert.</summary>
+    /// <summary>Gets per-day alert creation trends for the last N days (default 7, min 1, max 90).</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(AlertTrendsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AlertTrendsResponse>> GetTrends([FromQuery] AlertTrendsQueryRequest request, CancellationToken cancellationToken)
+    {
+        var trends = await _alertService.GetTrendsAsync(request, cancellationToken);
+        return Ok(trends);
+    }
+
+    /// <summary>Creates a new alert, or returns an existing near-duplicate alert if suppressed.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
-        var created = await _alertService.CreateAsync(request, cancellationToken);
-        return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
+        var result = await _alertService.CreateAsync(request, cancellationToken);
+        if (result.IsDuplicate)
+        {
+            Response.Headers["X-Duplicate-Suppressed"] = "true";
+            return Ok(result.Alert);
+        }
+
+        return CreatedAtRoute(nameof(GetById), new { id = result.Alert.Id }, result.Alert);
     }
 
     /// <summary>Updates an existing alert.</summary>
@@ -85,5 +102,37 @@ public class AlertsController : ControllerBase
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>Adds one or more tags to an alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddTagsRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var updated = await _alertService.AddTagsAsync(id, request, cancellationToken);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (TagLimitExceededException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = ex.Message
+            });
+        }
+    }
+
+    /// <summary>Removes a tag from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var updated = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
     }
 }

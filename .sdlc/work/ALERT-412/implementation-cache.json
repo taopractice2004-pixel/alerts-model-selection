@@ -1,0 +1,74 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "jira_id": "ALERT-412",
+  "jira_space": "NOT_PROVIDED",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "New GET /api/alerts/trends?days=N (default 7, min 1, max 90) returns one bucket per UTC calendar day for the last N days (oldest first), each with a total count and a per-severity count (including zero-count days/severities), reusing the AlertSeverityCountsResponse shape/ordering from GET /api/alerts/summary. Invalid days (out of range or non-numeric) returns 400 ValidationProblemDetails via the existing [Range] + [ApiController] auto-validation convention.",
+  "scope_anchors": [
+    "AlertsController: new GET /api/alerts/trends action",
+    "IAlertService / AlertManagementService: GetTrendsAsync + zero-fill bucket logic",
+    "IAlertRepository / AlertRepository: per-day per-severity count query over a UTC date range",
+    "New DTOs: AlertTrendsQueryRequest (Days), AlertTrendsResponse, AlertTrendBucketResponse (reuses AlertSeverityCountsResponse)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertTrendsQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertTrendsResponse.cs",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs (reused as-is, not modified)",
+    "AlertService.API/Program.cs (existing TimeProvider.System singleton registration, unaffected)"
+  ],
+  "selected_standards": [
+    "coding-standards.md",
+    "backend-dotnet-standards.md",
+    "api-rest-standards.md",
+    "service-architecture-standards.md",
+    "database-standards.md"
+  ],
+  "constraints": [
+    "days query param: default 7, min 1, max 90; out-of-range or non-numeric must yield 400 ValidationProblemDetails via [Range] on the request DTO + [ApiController] auto-validation (no manual ModelState branch), matching AlertQueryRequest.Page/PageSize convention",
+    "Buckets are UTC calendar days, oldest first, covering exactly the last N days ending on the current UTC day",
+    "Every returned bucket must include all four severities (Low, Medium, High, Critical) with zero-count defaults where no alerts exist, in that fixed order via AlertSeverityCountsResponse",
+    "Use the injected TimeProvider for computing the current UTC day / window boundaries, not DateTime.UtcNow directly (matches CreateAsync convention)",
+    "Repository query must be a single set-based grouped query (no SELECT *, no per-day loop queries) per database-standards.md",
+    "No schema/migration change needed; query aggregates existing Alerts.CreatedDate and Alerts.Severity columns",
+    "Exceeding the compact 5-file source-file guidance is intentional here: the slice genuinely spans API, service, data-abstraction, data-SQL, and 3 new/edited DTO files plus a constants file"
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.sln --no-build"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "behavior coverage: default days=7; explicit days within range; days=1 boundary; days=90 boundary; days=0 -> 400; days=91 -> 400; non-numeric days -> 400; zero-count days/severities are present and zero; bucket ordering is oldest-first; severity ordering within a bucket matches Low/Medium/High/Critical"
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "resolved_decisions": [
+    "Jira Space/Project not provided by the user; recorded as NOT_PROVIDED following the precedent set by ALERT-410 and ALERT-411 rather than blocking, since the Jira ID and full story detail were supplied directly."
+  ]
+}
