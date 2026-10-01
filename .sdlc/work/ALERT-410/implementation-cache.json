@@ -1,0 +1,71 @@
+{
+  "story_id": "ALERT-410",
+  "classification": "AMBIGUOUS",
+  "classification_reason": "Acceptance criteria require several unspecified design decisions: join-table/entity shape, global vs per-alert tag uniqueness, case-insensitive normalization strategy, and exact semantics of the 10-tag cap and delete-by-name lookup. Resolved via conservative assumptions below; implementation-plan.md and requirement-analysis.md record the decisions.",
+  "story_description": "As an operator, I want to attach multiple free-form tags to an alert so I can filter alerts by tag.",
+  "acceptance_criteria": [
+    "New Tag concept with a many-to-many relationship to Alert using a new join table/migration",
+    "POST /api/alerts/{id}/tags adds one or more tags, deduplicates case-insensitively, maximum 10 tags per alert, each tag 1-30 characters",
+    "DELETE /api/alerts/{id}/tags/{tag} removes a tag and returns 404 if the alert or tag assignment does not exist",
+    "GET /api/alerts gains an optional tag query filter composable with isActive, severity, date range, and search",
+    "Tags are included in AlertResponse"
+  ],
+  "selected_standards": ["coding", "backend-dotnet", "api-rest", "database", "service-architecture"],
+  "scope_anchors": {
+    "domain": "Alert tagging",
+    "layers_touched": ["Models", "Data (interfaces)", "Data.SQL (EF Core)", "DTO", "API controller/service/mapping", "Common constants"],
+    "new_concepts": ["Tag entity", "AlertTag join entity/table", "AddAlertTagsRequest DTO", "tag query filter"]
+  },
+  "exact_source_files": [
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.Models/AlertTag.cs (new join entity)",
+    "AlertService.Models/Alert.cs (add Tags navigation)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs (add tag filter param + tag mutation methods)",
+    "AlertService.Data.SQL/AlertDbContext.cs (add DbSet<Tag>, DbSet<AlertTag>)",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs (new)",
+    "AlertService.Data.SQL/Configurations/AlertTagConfiguration.cs (new)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs (tag filter, Include(Tags), tag mutation methods)",
+    "AlertService.Data.SQL/Migrations/<timestamp>_AddAlertTags.cs (new, via dotnet ef migrations add)",
+    "AlertService.Common/Constants/AlertConstants.cs (TagMinLength, TagMaxLength, MaxTagsPerAlert)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs (add Tag property)",
+    "AlertService.DTO/Requests/AddAlertTagsRequest.cs (new)",
+    "AlertService.DTO/Responses/AlertResponse.cs (add Tags list)",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (map Tags)",
+    "AlertService.API/Services/IAlertService.cs (AddTagsAsync/RemoveTagAsync signatures)",
+    "AlertService.API/Services/AlertManagementService.cs (validation + dedup + 10-tag cap business logic)",
+    "AlertService.API/Controllers/AlertsController.cs (POST tags, DELETE tags/{tag} endpoints)"
+  ],
+  "exact_source_files_note": "Exceeds the default 5-file cap deliberately: the story spans a new domain concept (Tag), a new join table/migration, and touches every layer (Models -> Data -> Data.SQL -> DTO -> API) per repo-profile.md layering. This is the smallest file set that satisfies all five acceptance criteria.",
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "design_decisions": {
+    "tag_entity": "Tag { Id (int PK), Name (string, 1-30 chars, trimmed) }. Tags are shared/global rows so the same word is never duplicated in the Tags table; case-insensitive lookup reuses an existing row.",
+    "join_entity": "Explicit AlertTag { AlertId (FK), TagId (FK) } with composite PK (AlertId, TagId), matching the repo's existing explicit-configuration-class pattern (see AlertConfiguration.cs) instead of EF Core's implicit skip-navigation join table.",
+    "case_insensitive_dedup": "Normalize incoming tag text by trimming; look up existing Tag rows using a case-insensitive comparison (string.Equals(..., StringComparison.OrdinalIgnoreCase) in the repository query, consistent with the existing search filter's ToLower() pattern in AlertRepository.GetAllAsync). SQL Server's default collation is already case-insensitive, so a unique index on Tag.Name enforces this at the DB level too.",
+    "max_10_tags_per_alert": "Enforced in AlertManagementService before persisting: reject (400) the whole request if the resulting distinct tag count on the alert (existing + new, after case-insensitive de-dup) would exceed 10. Nothing is partially applied.",
+    "length_validation": "Each submitted tag must be 1-30 characters after trimming; validated via DataAnnotations on AddAlertTagsRequest plus a defensive check in the service layer.",
+    "delete_semantics": "DELETE /api/alerts/{id}/tags/{tag} matches {tag} case-insensitively against the alert's assigned tags; 404 if the alert does not exist OR the alert has no such tag assigned (acceptance criterion explicitly calls out both cases).",
+    "get_all_tag_filter": "AlertQueryRequest gains an optional `Tag` string property; when present, AlertRepository.GetAllAsync filters alerts that have a Tag whose Name matches case-insensitively, composable (ANDed) with existing isActive/severity/date-range/search filters.",
+    "alert_response_shape": "AlertResponse.Tags is IReadOnlyList<string> (tag names only) to avoid leaking internal Tag ids and keep the contract minimal, consistent with other response DTOs in AlertService.DTO/Responses."
+  },
+  "out_of_scope": [
+    "Tag rename/edit endpoints",
+    "Tag listing/autocomplete endpoint",
+    "Per-tag analytics or summary counts",
+    "Authorization/roles for tag operations (none exist elsewhere in the service)"
+  ],
+  "validation_commands": {
+    "restore": "dotnet tool restore; dotnet restore",
+    "build": "dotnet build AlertService.sln",
+    "test": "dotnet test",
+    "migration_add": "dotnet ef migrations add AddAlertTags --project AlertService.Data.SQL --startup-project AlertService.API",
+    "migration_script_refresh": "regenerate database/02_AlertServiceDb_Migrations.sql from the new migration if the project's existing convention requires it (confirm against repo-profile.md Data And Operations section before implementation)"
+  },
+  "missing_facts": [
+    "TO_BE_DISCOVERED: whether database/02_AlertServiceDb_Migrations.sql must be manually regenerated/appended as part of this story (repo-profile.md notes it is a generated idempotent script from EF migrations, but the exact regeneration command/tooling is NOT_CONFIGURED in repo context)",
+    "TO_BE_DISCOVERED: whether Tag.Name uniqueness should be enforced via a unique index assuming SQL Server's default case-insensitive collation, or an explicit computed/normalized column is required for portability to the Sqlite/InMemory test providers used in AlertService.Data.SQL.Tests"
+  ]
+}

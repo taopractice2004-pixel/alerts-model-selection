@@ -1,0 +1,58 @@
+{
+  "story_id": "ALERT-411",
+  "classification": "AMBIGUOUS",
+  "classification_reason": "Acceptance criteria describe required behavior (suppress near-duplicate alerts, configurable window, differentiate by severity/active state) but leave several implementation-shape decisions open: how the controller signals 200-vs-201, where the config lives and how it's bound, where the duplicate lookup is implemented, and the header-name constant location. Resolved via conservative, repo-consistent decisions below; see requirement-analysis.md.",
+  "story_description": "As an operator, I want near-duplicate alerts suppressed so I'm not flooded with repeats of the same issue.",
+  "acceptance_criteria": [
+    "On POST /api/alerts, if an active alert with the same Title (case-insensitive) and the same Severity was created within the last 15 minutes, do not create a new row; return 200 OK with the existing alert and response header X-Duplicate-Suppressed: true",
+    "A genuinely new alert still returns 201 Created",
+    "The suppression window in minutes must be configurable via appsettings.json and not hardcoded",
+    "Do not suppress across different severities or when the prior matching alert is inactive"
+  ],
+  "selected_standards": ["coding", "backend-dotnet", "api-rest", "service-architecture", "database"],
+  "scope_anchors": {
+    "domain": "Alert duplicate suppression",
+    "layers_touched": ["Data (interfaces)", "Data.SQL (EF Core)", "Common constants", "API options/service/controller"],
+    "new_concepts": ["AlertSuppressionOptions (IOptions<T>)", "CreateAlertResult/CreateAlertStatus result pattern", "IAlertRepository.FindActiveDuplicateAsync", "X-Duplicate-Suppressed header constant"]
+  },
+  "exact_source_files": [
+    "AlertService.API/appsettings.json (add AlertSuppression:DuplicateWindowMinutes section)",
+    "AlertService.API/Options/AlertSuppressionOptions.cs (new)",
+    "AlertService.API/Program.cs (register Configure<AlertSuppressionOptions>)",
+    "AlertService.Common/Constants/AlertConstants.cs (X-Duplicate-Suppressed header name constant)",
+    "AlertService.API/Services/IAlertService.cs (CreateAsync returns CreateAlertResult/CreateAlertStatus, analogous to AddAlertTagsResult/AddAlertTagsStatus)",
+    "AlertService.API/Services/AlertManagementService.cs (duplicate lookup + status branching, consumes IOptions<AlertSuppressionOptions>)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs (add FindActiveDuplicateAsync method)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs (implement FindActiveDuplicateAsync: case-insensitive title, IsActive==true, Severity match, CreatedDate >= cutoff)",
+    "AlertService.API/Controllers/AlertsController.cs (branch CreatedAtRoute vs Ok + X-Duplicate-Suppressed header based on CreateAlertStatus)"
+  ],
+  "exact_source_files_note": "Exceeds the default 5-file cap deliberately: the story requires a new config/options concept, a repository-level query addition, a result-type change to the service contract, and a controller branch, touching every layer per repo-profile.md layering (Common -> Data -> Data.SQL -> API options/service/controller). This is the smallest file set that satisfies all four acceptance criteria.",
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "design_decisions": {
+    "result_pattern": "Add CreateAlertStatus { Created, DuplicateSuppressed } enum and CreateAlertResult(CreateAlertStatus Status, AlertResponse Alert) record in IAlertService.cs, mirroring the existing AddAlertTagsResult/AddAlertTagsStatus pattern. IAlertService.CreateAsync returns CreateAlertResult instead of a bare AlertResponse; the controller branches on Status.",
+    "config_binding": "Introduce AlertService.API/Options/AlertSuppressionOptions.cs with a single int DuplicateWindowMinutes property (default 15). Bind via the standard ASP.NET Core IOptions<T> pattern: builder.Services.Configure<AlertSuppressionOptions>(builder.Configuration.GetSection(\"AlertSuppression\")) in Program.cs, injected into AlertManagementService as IOptions<AlertSuppressionOptions>. Chosen over raw IConfiguration access (the one existing precedent in Program.cs for Database:ApplyMigrationsOnStartup) because AlertManagementService needs a testable, injectable value and service-architecture.instructions.md favors correct DI configuration; appsettings.json gains a new top-level AlertSuppression:DuplicateWindowMinutes section (value 15).",
+    "duplicate_lookup": "Add a dedicated narrow repository method IAlertRepository.FindActiveDuplicateAsync(string title, Severity severity, DateTime createdAfter, CancellationToken) implemented in AlertRepository using the existing case-insensitive .ToLower() comparison pattern plus a.IsActive && a.Severity == severity && a.CreatedDate >= createdAfter, ordered by CreatedDate descending, first match. Chosen over reusing GetAllAsync's broader filter set for clarity, testability, and to express the exact AC #1/#4 predicate in one place rather than composing it at the call site.",
+    "header_constant": "Add AlertConstants.DuplicateSuppressedHeaderName = \"X-Duplicate-Suppressed\" instead of a hardcoded string literal in the controller, consistent with AlertConstants.cs being the repo's convention for small shared constants.",
+    "time_math": "At POST time, cutoff = _timeProvider.GetUtcNow().UtcDateTime - TimeSpan.FromMinutes(options.Value.DuplicateWindowMinutes); duplicate query filters CreatedDate >= cutoff. Window value comes only from configuration, never hardcoded in the service or repository.",
+    "response_status_mapping": "Controller: CreateAlertStatus.Created -> CreatedAtRoute(nameof(GetById), new { id = result.Alert.Id }, result.Alert) (201); CreateAlertStatus.DuplicateSuppressed -> Response.Headers[AlertConstants.DuplicateSuppressedHeaderName] = \"true\"; return Ok(result.Alert) (200)."
+  },
+  "out_of_scope": [
+    "Suppression across endpoints other than POST /api/alerts (no retroactive suppression of existing rows)",
+    "Configurable suppression scope beyond Title+Severity (e.g. matching on Description)",
+    "Any change to GET/PUT/DELETE alert endpoints",
+    "Auditing/logging of suppressed duplicates beyond the existing logger usage already in AlertManagementService"
+  ],
+  "validation_commands": {
+    "restore": "dotnet tool restore; dotnet restore",
+    "build": "dotnet build AlertService.sln",
+    "test": "dotnet test"
+  },
+  "missing_facts": [
+    "TO_BE_DISCOVERED: whether DuplicateWindowMinutes should have a documented default in appsettings.json (recommend 15, matching AC #1's literal example) versus requiring explicit configuration with no fallback. Resolved conservatively as a configured default of 15 in appsettings.json; confirm during /implement-story if the repo's config conventions require otherwise.",
+    "TO_BE_DISCOVERED: whether a duplicate match should consider only the single most recent matching alert or whether ties/multiple matches are possible. Resolved: the repository query returns the first/most recent active match within the window; multiple historical active matches are not expected given suppression prevents them from being created in the first place."
+  ]
+}

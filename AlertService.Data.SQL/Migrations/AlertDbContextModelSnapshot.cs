@@ -56,6 +56,71 @@ namespace AlertService.Data.SQL.Migrations
 
                     b.ToTable("Alerts", (string)null);
                 });
+
+            modelBuilder.Entity("AlertService.Models.AlertTag", b =>
+                {
+                    b.Property<int>("AlertId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AlertId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("AlertTags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertService.Models.Tag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertService.Models.AlertTag", b =>
+                {
+                    b.HasOne("AlertService.Models.Alert", "Alert")
+                        .WithMany("Tags")
+                        .HasForeignKey("AlertId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AlertService.Models.Tag", "Tag")
+                        .WithMany("AlertTags")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Alert");
+
+                    b.Navigation("Tag");
+                });
+
+            modelBuilder.Entity("AlertService.Models.Alert", b =>
+                {
+                    b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("AlertService.Models.Tag", b =>
+                {
+                    b.Navigation("AlertTags");
+                });
 #pragma warning restore 612, 618
         }
     }

@@ -1,0 +1,75 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends?days=N returning one zero-filled bucket per UTC calendar day (oldest-first) for the last N days (default 7, min 1, max 90), each with a total count and a per-severity count, reusing the Severity enum ordering already used by the summary endpoint.",
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs (GetSummary action as the sibling pattern)",
+    "AlertService.API/Services/AlertManagementService.cs#GetSummaryAsync",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs#GetSummaryAsync",
+    "AlertService.Common/Enums/Severity.cs (Low=1, Medium=2, High=3, Critical=4 ordering)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs (Range-attribute query validation pattern)"
+  ],
+  "exact_source_files": [
+    "AlertService.Common/Constants/AlertConstants.cs (add DefaultTrendsDays=7, MinTrendsDays=1, MaxTrendsDays=90)",
+    "AlertService.DTO/Requests/AlertTrendsQueryRequest.cs (new; [Range(MinTrendsDays, MaxTrendsDays)] int Days = DefaultTrendsDays)",
+    "AlertService.DTO/Responses/AlertTrendsResponse.cs + AlertTrendBucketResponse.cs (new; bucket = Date, TotalCount, SeverityCounts: AlertSeverityCountsResponse)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs (add GetTrendsAsync(DateTime fromDateUtc, DateTime toDateUtc, CancellationToken))",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs (implement GetTrendsAsync: group by CreatedDate.Date + Severity within [fromDateUtc, toDateUtc])",
+    "AlertService.API/Services/IAlertService.cs (add GetTrendsAsync(AlertTrendsQueryRequest, CancellationToken))",
+    "AlertService.API/Services/AlertManagementService.cs (implement: compute day window via TimeProvider, zero-fill all days/severities, oldest-first)",
+    "AlertService.API/Controllers/AlertsController.cs (new [HttpGet(\"trends\")] action, [FromQuery] AlertTrendsQueryRequest)"
+  ],
+  "exact_source_files_note": "Exceeds the default 5-file cap deliberately: a new read endpoint requires a query DTO, two new response DTOs, a repository contract + EF Core implementation, a service contract + implementation, and a controller action, touching every layer per repo-profile.md layering (Common -> DTO -> Data -> Data.SQL -> API service/controller). This is the smallest file set that satisfies all acceptance criteria.",
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Models/Alert.cs, AlertDbContext, EF migrations: None (read-only query over existing CreatedDate/Severity columns, no schema change)"
+  ],
+  "selected_standards": ["coding", "backend-dotnet", "api-rest", "service-architecture", "database"],
+  "constraints": [
+    "Days query param: default 7, minimum 1, maximum 90; invalid (out-of-range or non-numeric) must yield 400 with ValidationProblemDetails, consistent with the existing [ApiController] automatic model-state-to-ValidationProblemDetails behavior already relied on by AlertQueryRequest.Page/PageSize",
+    "Buckets are one per UTC calendar day for the last N days, oldest-first, including days/severities with zero alerts",
+    "Severity ordering within each bucket's per-severity breakdown must match the existing summary endpoint convention: Low, Medium, High, Critical (AlertSeverityCountsResponse property order / Severity enum order)",
+    "Day/severity counts must reflect alert CREATION date (CreatedDate), not IsActive state; do not filter by IsActive",
+    "Use the existing injected TimeProvider (not DateTime.UtcNow) in AlertManagementService to compute 'today' for testability, consistent with AlertManagementService's existing TimeProvider usage"
+  ],
+  "validation_commands": [
+    "dotnet tool restore",
+    "dotnet restore",
+    "dotnet build AlertService.sln",
+    "dotnet test"
+  ],
+  "coverage_commands": ["NOT_CONFIGURED"],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "New GetTrendsAsync service logic: default days, explicit days, zero-count day/severity fill, oldest-first ordering",
+    "New repository GetTrendsAsync: day-boundary grouping, severity grouping, empty-range result",
+    "New controller action: 200 OK happy path, 400 ValidationProblemDetails for days=0, days=91, and non-numeric days"
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "design_decisions": {
+    "day_window_anchor": "AlertManagementService.GetTrendsAsync computes today = _timeProvider.GetUtcNow().UtcDateTime.Date (same TimeProvider field already injected for CreatedDate/suppression logic); fromDateUtc = today.AddDays(-(request.Days - 1)); toDateUtc = today. Window is inclusive of today and the prior (Days - 1) days, totalling Days buckets.",
+    "aggregation_split": "Repository GetTrendsAsync returns only non-zero (Date, Severity, Count) rows grouped via EF Core GroupBy over [fromDateUtc, toDateUtc] (mirrors GetSummaryAsync's GroupBy/Select aggregation shape); the service layer owns zero-filling every day in the requested range and every Severity value (Low/Medium/High/Critical) so the repository stays a thin aggregation query and all zero-count business rules live in one place, consistent with how GetSummaryAsync splits raw counts (repository) from DTO shaping (service).",
+    "route_shape": "New sibling action GET api/alerts/trends (alongside the existing GET api/alerts/summary), bound via [FromQuery] AlertTrendsQueryRequest so DataAnnotations [Range] validation triggers the same automatic 400 ValidationProblemDetails path already exercised by AlertQueryRequest.Page/PageSize; no custom ApiBehaviorOptions needed since none exists today.",
+    "response_shape": "AlertTrendsResponse { IReadOnlyList<AlertTrendBucketResponse> Buckets }; AlertTrendBucketResponse { DateOnly Date (or DateTime at UTC midnight, matching repo's existing DateTime-only usage since no DateOnly precedent exists), int TotalCount, AlertSeverityCountsResponse SeverityCounts } reusing the existing AlertSeverityCountsResponse (Low/Medium/High/Critical) from the summary endpoint instead of inventing a new severity-count shape."
+  },
+  "out_of_scope": [
+    "Changes to GET /api/alerts/summary (unchanged; only reused as the severity-ordering/shape convention)",
+    "Any change to Alert CRUD endpoints or entity schema",
+    "Timezone/locale handling beyond UTC calendar days",
+    "Caching or pre-aggregation of trend data"
+  ]
+}
