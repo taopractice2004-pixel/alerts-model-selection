@@ -5,6 +5,9 @@ public static class AlertConstants
     public const int DefaultPageNumber = 1;
     public const int DefaultPageSize = 20;
     public const int MaxPageSize = 100;
+    public const int TagMinLength = 1;
+    public const int TagMaxLength = 30;
+    public const int MaxTagsPerAlert = 10;
     public const int SearchMaxLength = 200;
     public const string SortByCreatedDate = "createdDate";
     public const string SortBySeverity = "severity";

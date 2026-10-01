@@ -1,0 +1,103 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add alert-scoped free-form tags with persistence, assignment/removal endpoints, optional tag filtering, and tag projection in alert responses.",
+  "scope_anchors": [
+    "AlertService.API\\Controllers\\AlertsController.cs",
+    "AlertService.API\\Services\\AlertManagementService.cs",
+    "AlertService.Data.SQL\\Repositories\\AlertRepository.cs",
+    "GET /api/alerts",
+    "POST /api/alerts/{id}/tags",
+    "DELETE /api/alerts/{id}/tags/{tag}"
+  ],
+  "exact_source_files": [
+    "AlertService.API\\Controllers\\AlertsController.cs",
+    "AlertService.API\\Services\\AlertTagOperationStatus.cs",
+    "AlertService.API\\Services\\AlertTagOperationResult.cs",
+    "AlertService.API\\Services\\IAlertService.cs",
+    "AlertService.API\\Services\\AlertManagementService.cs",
+    "AlertService.API\\Mappings\\AlertMappingExtensions.cs",
+    "AlertService.DTO\\Requests\\AddAlertTagsRequest.cs",
+    "AlertService.DTO\\Requests\\AlertQueryRequest.cs",
+    "AlertService.DTO\\Responses\\AlertResponse.cs",
+    "AlertService.Data\\Interfaces\\IAlertRepository.cs",
+    "AlertService.Data.SQL\\Repositories\\AlertRepository.cs",
+    "AlertService.Data.SQL\\AlertDbContext.cs",
+    "AlertService.Data.SQL\\Configurations\\AlertConfiguration.cs",
+    "AlertService.Data.SQL\\Configurations\\TagConfiguration.cs",
+    "AlertService.Data.SQL\\Configurations\\AlertTagConfiguration.cs",
+    "AlertService.Models\\Alert.cs",
+    "AlertService.Models\\Tag.cs",
+    "AlertService.Models\\AlertTag.cs",
+    "AlertService.Common\\Constants\\AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests\\Controllers\\AlertsControllerTests.cs",
+    "AlertService.API.Tests\\Services\\AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests\\Repositories\\AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO\\Requests\\CreateAlertRequest.cs",
+    "AlertService.DTO\\Requests\\UpdateAlertRequest.cs",
+    "AlertService.Data.SQL\\Migrations\\AlertDbContextModelSnapshot.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Keep the change in the existing controller -> service -> repository -> EF Core slice.",
+    "Use DataAnnotations and shared constants for request validation to match current DTO patterns.",
+    "Enforce 1-30 characters per tag, maximum 10 tags per alert, and case-insensitive deduplication.",
+    "DELETE must return 404 when the alert does not exist or the specified tag is not assigned to that alert.",
+    "GET tag filtering must compose with existing isActive, severity, createdFrom, createdTo, search, sorting, and paging behavior.",
+    "AlertResponse must include tags for reads and mutation responses.",
+    "Add an EF migration and snapshot update for SQL Server / EF Core 8.",
+    "No checked-in OpenAPI file exists; controller signatures and annotations remain the in-repo API contract source."
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests\\AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests\\AlertService.Data.SQL.Tests.csproj",
+    "dotnet build AlertService.sln"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller coverage for add/remove tag endpoints and GET tag query binding.",
+    "Service coverage for normalization, case-insensitive deduplication, 10-tag cap, and missing-alert or missing-assignment behavior.",
+    "Repository coverage for tag persistence and composable tag filtering with existing filters."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "implementation_assumptions": [
+    "POST /api/alerts/{id}/tags uses a request DTO with a tags collection property.",
+    "GET /api/alerts uses a single optional tag query parameter matched case-insensitively.",
+    "Tag comparisons are case-insensitive, input is trimmed, and response casing preserves the stored display value.",
+    "Removing the final assignment does not require orphan Tag cleanup unless implementation reveals an existing cleanup convention."
+  ],
+  "planned_new_files": [
+    "AlertService.DTO\\Requests\\AddAlertTagsRequest.cs",
+    "AlertService.API\\Services\\AlertTagOperationStatus.cs",
+    "AlertService.API\\Services\\AlertTagOperationResult.cs",
+    "AlertService.Models\\Tag.cs",
+    "AlertService.Models\\AlertTag.cs",
+    "AlertService.Data.SQL\\Configurations\\TagConfiguration.cs",
+    "AlertService.Data.SQL\\Configurations\\AlertTagConfiguration.cs",
+    "AlertService.Data.SQL\\Migrations\\20261001132020_AddAlertTags.cs",
+    "AlertService.Data.SQL\\Migrations\\20261001132020_AddAlertTags.Designer.cs"
+  ]
+}

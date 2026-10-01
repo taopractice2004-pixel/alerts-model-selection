@@ -1,0 +1,80 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate active alerts during POST create when the same title and severity already exist within a configurable recent window.",
+  "scope_anchors": [
+    "AlertService.API\\Controllers\\AlertsController.cs",
+    "AlertService.API\\Services\\AlertManagementService.cs",
+    "AlertService.Data.SQL\\Repositories\\AlertRepository.cs",
+    "POST /api/alerts",
+    "X-Duplicate-Suppressed response header",
+    "AlertService.API\\appsettings.json"
+  ],
+  "exact_source_files": [
+    "AlertService.API\\Controllers\\AlertsController.cs",
+    "AlertService.API\\Services\\IAlertService.cs",
+    "AlertService.API\\Services\\AlertManagementService.cs",
+    "AlertService.Data\\Interfaces\\IAlertRepository.cs",
+    "AlertService.Data.SQL\\Repositories\\AlertRepository.cs",
+    "AlertService.API\\appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests\\Controllers\\AlertsControllerTests.cs",
+    "AlertService.API.Tests\\Services\\AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests\\Repositories\\AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API\\Program.cs",
+    "AlertService.API\\Mappings\\AlertMappingExtensions.cs",
+    "AlertService.Models\\Alert.cs",
+    "AlertService.DTO\\Responses\\AlertResponse.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Keep the change inside the existing alert controller -> service -> repository -> EF Core slice.",
+    "Duplicate suppression applies only on POST create; existing update/deactivate/delete behavior remains unchanged.",
+    "A duplicate must match on title case-insensitively, severity exactly, IsActive == true, and CreatedDate within the configured window.",
+    "Suppressed creates return 200 OK with the existing alert and response header X-Duplicate-Suppressed: true.",
+    "Genuinely new alerts continue to return 201 Created.",
+    "The suppression window must come from appsettings-backed configuration and not be hardcoded in service or repository code.",
+    "Reuse TimeProvider for current UTC time evaluation so service tests remain deterministic.",
+    "No schema or migration change is expected for this story."
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests\\AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests\\AlertService.Data.SQL.Tests.csproj",
+    "dotnet build AlertService.sln"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller coverage for 200 suppressed responses, created responses, and X-Duplicate-Suppressed header behavior.",
+    "Service coverage for configurable-window evaluation, suppress-versus-create branching, and exclusion of inactive or different-severity alerts.",
+    "Repository coverage for recent active duplicate lookup using case-insensitive title matching and time-window filtering."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "implementation_assumptions": [
+    "Duplicate comparison uses the already-trimmed title representation produced by the existing create mapping path.",
+    "The recent-window boundary is inclusive for alerts created at or after utcNow minus the configured minutes.",
+    "Configuration access should stay minimal and repo-aligned; introduce extra options wiring only if required by the chosen implementation shape."
+  ],
+  "planned_new_files": []
+}

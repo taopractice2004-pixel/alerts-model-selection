@@ -1,0 +1,88 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends with bounded days query validation and oldest-first UTC daily severity buckets for dashboard trend charts.",
+  "scope_anchors": [
+    "AlertService.API\\Controllers\\AlertsController.cs",
+    "AlertService.API\\Services\\AlertManagementService.cs",
+    "AlertService.Data.SQL\\Repositories\\AlertRepository.cs",
+    "GET /api/alerts/trends",
+    "days query parameter",
+    "UTC daily alert-creation trend buckets"
+  ],
+  "exact_source_files": [
+    "AlertService.API\\Controllers\\AlertsController.cs",
+    "AlertService.API\\Services\\IAlertService.cs",
+    "AlertService.API\\Services\\AlertManagementService.cs",
+    "AlertService.Common\\Constants\\AlertConstants.cs",
+    "AlertService.Data\\Interfaces\\IAlertRepository.cs",
+    "AlertService.Data.SQL\\Repositories\\AlertRepository.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests\\Controllers\\AlertsControllerTests.cs",
+    "AlertService.API.Tests\\Services\\AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests\\Repositories\\AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Common\\Enums\\Severity.cs",
+    "AlertService.DTO\\Requests\\AlertQueryRequest.cs",
+    "AlertService.DTO\\Requests\\AlertTrendsQueryRequest.cs",
+    "AlertService.DTO\\Responses\\AlertSummaryResponse.cs",
+    "AlertService.DTO\\Responses\\AlertSeverityCountsResponse.cs",
+    "AlertService.DTO\\Responses\\AlertTrendBucketResponse.cs",
+    "AlertService.DTO\\Responses\\AlertTrendsResponse.cs",
+    "AlertService.API\\Program.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Keep the change in the existing controller -> service -> repository -> EF Core slice.",
+    "Use a query DTO with existing data-annotation validation patterns so invalid days values produce 400 ValidationProblemDetails consistently.",
+    "days defaults to 7 and must accept only 1 through 90 inclusive.",
+    "Return one bucket per UTC calendar day for the last N days in oldest-first order.",
+    "Every bucket must include zero-count days and zero-count severities.",
+    "Severity ordering must stay aligned with the summary endpoint convention: Low, Medium, High, Critical.",
+    "No schema or migration work is expected for this story."
+  ],
+  "validation_commands": [
+    "dotnet test AlertService.API.Tests\\AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests\\AlertService.Data.SQL.Tests.csproj",
+    "dotnet build AlertService.sln"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller coverage for the new trends action, days defaulting expectations, and bad-request behavior for invalid query values.",
+    "Service coverage for oldest-first bucket ordering, zero-filled missing UTC days, and zero-filled severity counts in summary-consistent order.",
+    "Repository coverage for UTC date-window filtering and per-day per-severity aggregation."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "implementation_assumptions": [
+    "Last N days includes the current UTC calendar day plus the previous N - 1 UTC days.",
+    "Alert CreatedDate values already follow the repository's existing UTC convention and should be grouped by UTC calendar date.",
+    "The service layer should handle zero-filling of missing dates and severities unless implementation discovers a cleaner existing pattern.",
+    "If controller-unit coverage cannot prove non-numeric query binding behavior, implementation may add one focused WebApplicationFactory API test and then update this cache."
+  ],
+  "planned_new_files": [
+    "AlertService.DTO\\Requests\\AlertTrendsQueryRequest.cs",
+    "AlertService.DTO\\Responses\\AlertTrendBucketResponse.cs",
+    "AlertService.DTO\\Responses\\AlertTrendsResponse.cs"
+  ]
+}

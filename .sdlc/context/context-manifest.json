@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context-complete",
+  "generatedAtUtc": "2026-10-01T12:59:14.9241677Z",
+  "repositoryMode": "MODE_C_EXISTING_PROJECT",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "standards-index.json",
+    "context-exclusions.json",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "AlertService.API/Program.cs",
+    "language": "C#",
+    "platformOrRuntime": ".NET 8 / ASP.NET Core",
+    "applicationType": "Multi-project REST API microservice",
+    "dataStore": "SQL Server via Entity Framework Core",
+    "testFrameworks": [
+      "xUnit",
+      "Moq",
+      "Microsoft.AspNetCore.Mvc.Testing",
+      "EF Core InMemory",
+      "SQLite"
+    ],
+    "buildCommand": "dotnet build AlertService.sln",
+    "testCommand": "dotnet test",
+    "runCommand": "dotnet run --project AlertService.API --launch-profile https"
+  },
+  "sourceInputs": {
+    "rootDocs": [
+      "README.md",
+      ".sdlc/README.md"
+    ],
+    "buildFiles": [
+      "AlertService.sln",
+      "Directory.Build.props",
+      "dotnet-tools.json",
+      "AlertService.API/AlertService.API.csproj",
+      "AlertService.Data.SQL/AlertService.Data.SQL.csproj"
+    ],
+    "standards": [
+      "standards/coding-standards.md",
+      "standards/backend-dotnet-standards.md",
+      "standards/api-rest-standards.md",
+      "standards/database-standards.md",
+      "standards/service-architecture-standards.md",
+      "standards/frontend-react-standards.md",
+      "standards/ui-standards.md"
+    ],
+    "sampleSource": [
+      "AlertService.API/Program.cs",
+      "AlertService.API/Controllers/AlertsController.cs",
+      "AlertService.API/Services/AlertManagementService.cs",
+      "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+      "AlertService.Data.SQL/AlertDbContext.cs"
+    ]
+  },
+  "notes": "Repository cache rebuilt from the current solution, standards, README, configuration, and representative source files. Re-run /refresh-repo-context only when repository structure, standards, or build/runtime patterns materially change."
+}

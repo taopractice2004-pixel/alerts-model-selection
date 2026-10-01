@@ -1,0 +1,102 @@
+{
+  "description": "Routing index for repository standards. Maps each standard to its full source, compact instruction file, and applicable file types. Does not contain the standard rules themselves.",
+  "standard_id_field": "id",
+  "cache_field": "selected_standards",
+  "note": "Stages select relevant standard ids into implementation-cache.json 'selected_standards'. Compact rules auto-apply via the instruction files (applyTo). Full source files are read only when an exact rule or missing detail is required.",
+  "standards": [
+    {
+      "id": "coding",
+      "name": "Global Coding Standards",
+      "source_file": "standards/coding-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/coding.instructions.md",
+      "applies_to": "**/*.cs,**/*.ts,**/*.tsx,**/*.js,**/*.jsx,**/*.sql",
+      "technologies": [
+        "all-code"
+      ],
+      "scope": "global",
+      "priority": "global"
+    },
+    {
+      "id": "backend-dotnet",
+      "name": "Backend .NET Standards",
+      "source_file": "standards/backend-dotnet-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/backend-dotnet.instructions.md",
+      "applies_to": "**/*.cs,**/*.csproj",
+      "technologies": [
+        "dotnet",
+        "csharp"
+      ],
+      "scope": "backend",
+      "priority": "high-when-present"
+    },
+    {
+      "id": "frontend-react",
+      "name": "Frontend React Standards",
+      "source_file": "standards/frontend-react-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/frontend-react.instructions.md",
+      "applies_to": "**/*.tsx,**/*.jsx,**/*.ts,**/*.js",
+      "technologies": [
+        "react",
+        "typescript",
+        "javascript"
+      ],
+      "scope": "frontend",
+      "priority": "conditional"
+    },
+    {
+      "id": "api-rest",
+      "name": "REST API Standards",
+      "source_file": "standards/api-rest-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/api-rest.instructions.md",
+      "applies_to": "**/*Controller.cs,**/openapi*.yaml,**/openapi*.yml,**/swagger*.yaml,**/swagger*.yml,**/*.openapi.yaml,**/*.openapi.yml",
+      "technologies": [
+        "rest",
+        "openapi",
+        "dotnet"
+      ],
+      "scope": "api-contract",
+      "priority": "high-when-present"
+    },
+    {
+      "id": "database",
+      "name": "Database Standards",
+      "source_file": "standards/database-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/database.instructions.md",
+      "applies_to": "**/*.sql,**/Migrations/**,**/*DbContext.cs,**/*Repository.cs",
+      "technologies": [
+        "sql",
+        "ef",
+        "database"
+      ],
+      "scope": "database",
+      "priority": "high-when-present"
+    },
+    {
+      "id": "service-architecture",
+      "name": "Service Architecture Standards",
+      "source_file": "standards/service-architecture-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/service-architecture.instructions.md",
+      "applies_to": "**/*Service.cs,**/*Client.cs,**/Program.cs,**/Startup.cs",
+      "technologies": [
+        "microservices",
+        "dotnet",
+        "architecture"
+      ],
+      "scope": "service-architecture",
+      "priority": "high-when-present"
+    },
+    {
+      "id": "ui",
+      "name": "UI Standards",
+      "source_file": "standards/ui-standards.md",
+      "compact_instruction_file": ".github/instructions/standards/ui.instructions.md",
+      "applies_to": "**/*.html,**/*.css,**/*.scss",
+      "technologies": [
+        "html",
+        "css"
+      ],
+      "scope": "ui-markup-styling",
+      "priority": "conditional"
+    }
+  ]
+}

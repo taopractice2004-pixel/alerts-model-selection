@@ -15,6 +15,7 @@ public interface IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = "createdDate",
         string sortDirection = "desc",
         int page = 1,
@@ -24,11 +25,30 @@ public interface IAlertRepository
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AlertTrendCount>> GetDailyTrendsAsync(
+        DateTime startDateUtc,
+        DateTime endDateUtcExclusive,
+        CancellationToken cancellationToken = default);
+
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<Alert?> GetActiveDuplicateAsync(string title, Severity severity, DateTime createdAfterUtc, CancellationToken cancellationToken = default);
+
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
+
+    Task RemoveTagAsync(Alert alert, string tag, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
 }
+
+public sealed record AlertTrendCount(
+    DateTime Date,
+    int TotalCount,
+    int LowCount,
+    int MediumCount,
+    int HighCount,
+    int CriticalCount);

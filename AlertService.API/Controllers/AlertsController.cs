@@ -10,6 +10,7 @@ namespace AlertService.API.Controllers;
 [Produces("application/json")]
 public class AlertsController : ControllerBase
 {
+    private const string DuplicateSuppressedHeaderName = "X-Duplicate-Suppressed";
     private readonly IAlertService _alertService;
 
     public AlertsController(IAlertService alertService)
@@ -46,14 +47,32 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>Gets UTC daily alert trends for the requested number of days.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(AlertTrendsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AlertTrendsResponse>> GetTrends([FromQuery] AlertTrendsQueryRequest request, CancellationToken cancellationToken)
+    {
+        var trends = await _alertService.GetTrendsAsync(request, cancellationToken);
+        return Ok(trends);
+    }
+
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
-        var created = await _alertService.CreateAsync(request, cancellationToken);
-        return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
+        var result = await _alertService.CreateAsync(request, cancellationToken);
+
+        if (result.WasDuplicateSuppressed)
+        {
+            Response.Headers.Append(DuplicateSuppressedHeaderName, bool.TrueString.ToLowerInvariant());
+            return Ok(result.Alert);
+        }
+
+        return CreatedAtRoute(nameof(GetById), new { id = result.Alert.Id }, result.Alert);
     }
 
     /// <summary>Updates an existing alert.</summary>
@@ -65,6 +84,34 @@ public class AlertsController : ControllerBase
     {
         var updated = await _alertService.UpdateAsync(id, request, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
+    }
+
+    /// <summary>Adds one or more tags to an alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _alertService.AddTagsAsync(id, request, cancellationToken);
+
+        return result.Status switch
+        {
+            AlertTagOperationStatus.Success => Ok(result.Alert),
+            AlertTagOperationStatus.NotFound => NotFound(),
+            AlertTagOperationStatus.ValidationFailed => BuildValidationProblem(result.ErrorMessage),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
+    /// <summary>Removes a tag assignment from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var result = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return result.Status == AlertTagOperationStatus.NotFound ? NotFound() : Ok(result.Alert);
     }
 
     /// <summary>Deactivates an existing alert.</summary>
@@ -85,5 +132,11 @@ public class AlertsController : ControllerBase
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    private ActionResult<AlertResponse> BuildValidationProblem(string? errorMessage)
+    {
+        ModelState.AddModelError(nameof(AddAlertTagsRequest.Tags), errorMessage ?? "Validation failed.");
+        return ValidationProblem(ModelState);
     }
 }

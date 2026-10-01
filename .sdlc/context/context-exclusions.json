@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-10-01T12:59:14.9241677Z",
+  "detected_technologies": [
+    "dotnet",
+    "aspnet-core",
+    "entity-framework-core",
+    "sql-server",
+    "serilog",
+    "xunit"
+  ],
+  "excluded_paths": [
+    ".vs/",
+    "TestResults/"
+  ],
+  "excluded_patterns": [
+    "**/bin/",
+    "**/obj/",
+    "**/Logs/",
+    "**/*.user"
+  ],
+  "reason": "Generated, dependency, build, cache, binary or runtime-noise content that should normally not be used as Copilot context."
+}
