@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context",
+  "generatedAtUtc": "2026-10-01T13:58:30Z",
+  "repositoryMode": "MODE_C_EXISTING_PROJECT",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "standards-index.json",
+    "context-exclusions.json",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "AlertService.API/Program.cs",
+    "language": "C#",
+    "platformOrRuntime": ".NET 8",
+    "applicationType": "ASP.NET Core Web API",
+    "dataStore": "SQL Server via EF Core",
+    "testFrameworks": [
+      "xUnit",
+      "Moq"
+    ],
+    "buildCommand": "dotnet build AlertService.sln",
+    "testCommand": "dotnet test",
+    "runCommand": "dotnet run --project AlertService.API --launch-profile https"
+  },
+  "sourceInputs": {
+    "rootDocs": [
+      "README.md"
+    ],
+    "buildFiles": [
+      "AlertService.sln",
+      "Directory.Build.props",
+      "dotnet-tools.json",
+      ".gitignore"
+    ],
+    "standards": [
+      "standards/api-rest-standards.md",
+      "standards/backend-dotnet-standards.md",
+      "standards/coding-standards.md",
+      "standards/database-standards.md",
+      "standards/frontend-react-standards.md",
+      "standards/service-architecture-standards.md",
+      "standards/ui-standards.md"
+    ],
+    "sampleSource": [
+      "AlertService.API/Program.cs",
+      "AlertService.API/Controllers/AlertsController.cs",
+      "AlertService.API/Services/AlertManagementService.cs",
+      "AlertService.Data.SQL/Extensions/ServiceCollectionExtensions.cs"
+    ]
+  },
+  "notes": "Repository context cache generated from current repository structure and standards. Refresh with /refresh-repo-context when structure, standards, or build/test commands materially change."
+}

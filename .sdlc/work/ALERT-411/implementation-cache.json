@@ -1,0 +1,73 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate alert creation for active alerts with same title/severity inside a configurable time window.",
+  "scope_anchors": [
+    "POST /api/alerts",
+    "AlertManagementService.CreateAsync",
+    "repository query for active title+severity duplicate within cutoff",
+    "response header X-Duplicate-Suppressed: true",
+    "appsettings-configured duplicate suppression window (minutes)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertCreateResult.cs",
+    "AlertService.API/Services/DuplicateSuppressionOptions.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs",
+    "AlertService.DTO/Requests/CreateAlertRequest.cs",
+    "AlertService.Models/Alert.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Duplicate match requires same title case-insensitively and same severity.",
+    "Only active prior alerts are eligible for suppression.",
+    "Prior matching alert must be within configured window minutes from current UTC time.",
+    "Suppressed duplicate returns 200 OK and includes header X-Duplicate-Suppressed: true.",
+    "New alert creation remains 201 Created with CreatedAtRoute behavior.",
+    "Suppression window value must come from appsettings.json (no hardcoded constant)."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller create endpoint returns 200 + suppression header for duplicate suppression and 201 for new create.",
+    "Service create flow enforces title/severity/active/window suppression conditions accurately.",
+    "Repository duplicate lookup honors case-insensitive title and window boundary conditions."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

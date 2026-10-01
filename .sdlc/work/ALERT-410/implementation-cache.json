@@ -1,0 +1,83 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add multi-tag support for alerts with assignment APIs, composable tag filtering, and tag projection in alert responses.",
+  "scope_anchors": [
+    "POST /api/alerts/{id}/tags",
+    "DELETE /api/alerts/{id}/tags/{tag}",
+    "GET /api/alerts?tag=",
+    "Alert many-to-many Tag persistence via EF migration"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/AlertTagOperationResult.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs",
+    "AlertService.DTO/Requests/AddAlertTagRequest.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Models/Alert.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/*",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Many-to-many Alert-Tag data model with migration is required.",
+    "Tag add operation must deduplicate case-insensitively.",
+    "Maximum 10 tags per alert.",
+    "Each tag length must be 1-30 characters.",
+    "DELETE must return 404 when alert does not exist or tag assignment does not exist.",
+    "Tag filter on GET /api/alerts must compose with existing filters.",
+    "Tags must be included in AlertResponse."
+  ],
+  "validation_commands": [
+    "dotnet build AlertService.sln",
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [
+    "Controller behavior coverage for tag add/remove status codes and request validation.",
+    "Service behavior coverage for normalization, dedupe, max-count enforcement, and not-found propagation.",
+    "Repository behavior coverage for composable tag filtering and tag assignment persistence/removal."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

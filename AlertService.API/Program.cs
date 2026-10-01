@@ -32,6 +32,11 @@ try
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+    builder.Services
+        .AddOptions<DuplicateSuppressionOptions>()
+        .Bind(builder.Configuration.GetSection(DuplicateSuppressionOptions.SectionName))
+        .Validate(options => options.WindowMinutes > 0, "Alert duplicate suppression window must be greater than zero.")
+        .ValidateOnStart();
 
     builder.Services.AddSqlDataAccess(builder.Configuration);   // DbContext + repositories
     builder.Services.AddAlertHealthChecks();
