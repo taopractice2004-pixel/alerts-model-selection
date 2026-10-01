@@ -15,4 +15,6 @@ public class AlertResponse
     public DateTime CreatedDate { get; set; }
 
     public bool IsActive { get; set; }
+
+    public IReadOnlyList<string> Tags { get; set; } = new List<string>();
 }

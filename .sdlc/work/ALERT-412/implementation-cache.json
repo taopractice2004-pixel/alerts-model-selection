@@ -1,0 +1,73 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends returning daily alert-creation counts bucketed per UTC calendar day and broken down by severity, mirroring the existing /api/alerts/summary slice.",
+  "scope_anchors": [
+    "GET /api/alerts/trends endpoint",
+    "AlertsController.GetTrends action (mirrors GetSummary)",
+    "IAlertService.GetTrendsAsync / AlertManagementService.GetTrendsAsync",
+    "IAlertRepository per-UTC-day severity counts / AlertRepository GroupBy(CreatedDate.Date, Severity)",
+    "AlertTrendsQueryRequest.Days [Range] validation",
+    "AlertTrendsResponse + AlertTrendBucketResponse reusing AlertSeverityCountsResponse",
+    "AlertConstants DefaultTrendDays/MinTrendDays/MaxTrendDays",
+    "Severity enum ordering (Low=1, Medium=2, High=3, Critical=4)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertTrendsQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertTrendsResponse.cs",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs",
+    "AlertService.DTO/Responses/AlertSummaryResponse.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.Common/Enums/Severity.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Additive endpoint mirroring /api/alerts/summary end-to-end; do not change existing summary behavior.",
+    "Counts are over all alerts by CreatedDate (alert-creation counts), not filtered by IsActive.",
+    "Use injected TimeProvider (_timeProvider.GetUtcNow().UtcDateTime) for a deterministic UTC window.",
+    "Buckets: one per UTC calendar day for N days, oldest-first, filling zero-count days and zero-count severities.",
+    "days defaults to 7 with [Range(MinTrendDays=1, MaxTrendDays=90)]; non-nullable int binding + [Range] yield default [ApiController] 400 ValidationProblemDetails (no custom InvalidModelStateResponseFactory).",
+    "Reuse Severity ordering (Low=1, Medium=2, High=3, Critical=4) and AlertSeverityCountsResponse shape consistent with summary.",
+    "AlertTrendBucketResponse exposes UTC date, TotalCount, and SeverityCounts (AlertSeverityCountsResponse).",
+    "Add AlertTrendBucketResponse alongside AlertTrendsResponse in AlertTrendsResponse.cs; no test authoring in this stage."
+  ],
+  "validation_commands": [
+    "dotnet build",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [],
+  "test_file_strategy": "",
+  "desired_test_layer": "",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

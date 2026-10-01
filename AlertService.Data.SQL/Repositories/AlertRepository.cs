@@ -21,13 +21,16 @@ public class AlertRepository : IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Alert> query = _context.Alerts.AsNoTracking();
+        IQueryable<Alert> query = _context.Alerts
+            .AsNoTracking()
+            .Include(a => a.Tags);
 
         if (isActive.HasValue)
         {
@@ -53,6 +56,12 @@ public class AlertRepository : IAlertRepository
         {
             var normalizedSearch = search.Trim().ToLower();
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = tag.Trim().ToLower();
+            query = query.Where(a => a.Tags.Any(t => t.Name.ToLower() == normalizedTag));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -87,6 +96,28 @@ public class AlertRepository : IAlertRepository
         return summary is null
             ? (0, 0, 0, 0, 0, 0, 0)
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
+    }
+
+    public async Task<IReadOnlyList<(DateTime Day, Severity Severity, int Count)>> GetDailyTrendsAsync(
+        DateTime fromInclusive,
+        DateTime toExclusive,
+        CancellationToken cancellationToken = default)
+    {
+        var buckets = await _context.Alerts
+            .AsNoTracking()
+            .Where(alert => alert.CreatedDate >= fromInclusive && alert.CreatedDate < toExclusive)
+            .GroupBy(alert => new { Day = alert.CreatedDate.Date, alert.Severity })
+            .Select(group => new
+            {
+                group.Key.Day,
+                group.Key.Severity,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return buckets
+            .Select(bucket => (bucket.Day, bucket.Severity, bucket.Count))
+            .ToList();
     }
 
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
@@ -124,7 +155,9 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -132,6 +165,20 @@ public class AlertRepository : IAlertRepository
         await _context.Alerts.AddAsync(alert, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return alert;
+    }
+
+    public async Task<Alert?> FindActiveDuplicateAsync(string title, Severity severity, DateTime createdOnOrAfterUtc, CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLower();
+
+        return await _context.Alerts
+            .AsNoTracking()
+            .Where(a => a.IsActive
+                && a.Severity == severity
+                && a.Title.ToLower() == normalizedTitle
+                && a.CreatedDate >= createdOnOrAfterUtc)
+            .OrderByDescending(a => a.CreatedDate)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -144,5 +191,65 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AddTagsAsync(int alertId, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        var alert = await _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
+
+        if (alert is null)
+        {
+            return;
+        }
+
+        foreach (var name in tags)
+        {
+            var canonical = name.Trim();
+            if (canonical.Length == 0)
+            {
+                continue;
+            }
+
+            // Skip tags already assigned to this alert (case-insensitive).
+            if (alert.Tags.Any(t => string.Equals(t.Name, canonical, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            // Reuse an existing Tag row whose normalized name matches rather than creating a duplicate.
+            var lowered = canonical.ToLower();
+            var existingTag = await _context.Tags
+                .FirstOrDefaultAsync(t => t.Name.ToLower() == lowered, cancellationToken);
+
+            alert.Tags.Add(existingTag ?? new Tag { Name = canonical });
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
+
+        if (alert is null)
+        {
+            return false;
+        }
+
+        var existing = alert.Tags
+            .FirstOrDefault(t => string.Equals(t.Name, tag.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+        {
+            return false;
+        }
+
+        alert.Tags.Remove(existing);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

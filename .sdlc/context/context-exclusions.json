@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-10-01T10:42:59Z",
+  "status": "generated",
+  "detected_technologies": ["dotnet", "csharp", "aspnetcore", "efcore", "sqlserver", "xunit"],
+  "excluded_paths": [],
+  "excluded_patterns": [
+    "**/bin/**",
+    "**/obj/**",
+    "**/.vs/**",
+    "**/TestResults/**",
+    "**/AlertService.API/Logs/**",
+    "**/*.user"
+  ],
+  "reason": "Generated, dependency, build, cache, binary or runtime-noise content that should normally not be used as Copilot context.",
+  "notes": "Derived from .gitignore and the actual .NET repository structure. bin/obj are build output, .vs is the IDE cache, TestResults is test output, AlertService.API/Logs holds Serilog rolling logs, *.user are per-user IDE files. Normal source and config files (*.json, *.csproj, *.sql, appsettings*.json, Directory.Build.props, dotnet-tools.json) are NOT excluded because they carry build, runtime, and architecture information. EF Migrations under AlertService.Data.SQL/Migrations are authoritative source and are NOT excluded. /refresh-repo-context recalculates this file only when structure, technology, .gitignore, build configuration, or generated-output patterns materially change."
+}

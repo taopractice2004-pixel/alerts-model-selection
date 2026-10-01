@@ -1,0 +1,71 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate alert creation on POST /api/alerts: if an active alert with the same Title (case-insensitive, trimmed) and same Severity was created within a configurable recent window, return 200 OK with the existing alert plus header X-Duplicate-Suppressed: true (no new row); otherwise create and return 201.",
+  "scope_anchors": [
+    "POST /api/alerts duplicate suppression (200 + X-Duplicate-Suppressed header vs 201)",
+    "Configurable AlertSuppression:WindowMinutes (default 15)",
+    "IAlertRepository.FindActiveDuplicateAsync (active + same Severity + case-insensitive Title + within window)",
+    "AlertCreateResult (AlertResponse + WasSuppressed)",
+    "Negative cases: different severity / inactive prior / outside window => create new"
+  ],
+  "exact_source_files": [
+    "AlertService.API/appsettings.json",
+    "AlertService.API/Configuration/AlertSuppressionOptions.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/AlertCreateResult.cs",
+    "AlertService.API/Controllers/AlertsController.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs (bind/register AlertSuppressionOptions from configuration)",
+    "Injected TimeProvider (UTC) used for window math now - WindowMinutes",
+    "Existing EF-translatable case-insensitive .ToLower() title pattern in AlertRepository"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "service-architecture",
+    "database"
+  ],
+  "constraints": [
+    "Slice is intentionally broader than the 5-file soft cap: the suppression feature legitimately spans API (controller + service + config) and Data (interface + repository) layers end-to-end.",
+    "Suppression window is configurable via appsettings.json under section AlertSuppression with key WindowMinutes (default 15); must be read from config and not hardcoded, bound via strongly-typed AlertSuppressionOptions registered in Program.cs.",
+    "A code fallback default of 15 minutes when config is missing is an acceptable design note (confirm during implement-story).",
+    "Duplicate match criteria: IsActive == true AND same Severity AND case-insensitive, trimmed Title equality AND CreatedDate >= (now - window); return a deterministic match (most recent) or null.",
+    "EF Core stays strictly in AlertRepository; AlertManagementService must not reference EF Core. Window math uses the injected TimeProvider (UTC). Title compared trimmed consistent with existing ToEntity trimming; reuse existing EF-translatable .ToLower() pattern.",
+    "Service returns AlertCreateResult (AlertResponse + WasSuppressed); controller returns Ok(result.Alert) + header X-Duplicate-Suppressed: true when suppressed, else CreatedAtRoute(...) 201; update [ProducesResponseType] to document 200 and 201.",
+    "No new DB columns are introduced, so no EF migration and no change to database/02_AlertServiceDb_Migrations.sql are required.",
+    "Do not suppress across different severities, when the prior matching alert is inactive, or when the prior match is outside the window.",
+    "Security: validate input at the trust boundary (existing CreateAsync validation); parameterized EF LINQ for the duplicate query (no injection); no secrets; errors must not leak internals."
+  ],
+  "validation_commands": [
+    "dotnet build",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [],
+  "test_file_strategy": "edit_existing_unit_test_file",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

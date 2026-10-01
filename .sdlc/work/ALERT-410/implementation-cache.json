@@ -1,0 +1,80 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "story_case": "SIMPLE",
+  "bug_case": "",
+  "testcase_case": "",
+  "relationship_mode": "standalone",
+  "effort_mode": "low",
+  "repository_mode": "MODE_C_EXISTING_PROJECT",
+  "summary": "Attach multiple free-form tags to an alert (new Tag entity + AlertTags many-to-many), add/remove tag endpoints, composable tag filter on GET /api/alerts, and tags in AlertResponse.",
+  "scope_anchors": [
+    "POST /api/alerts/{id}/tags",
+    "DELETE /api/alerts/{id}/tags/{tag}",
+    "GET /api/alerts tag filter",
+    "Tag entity",
+    "AlertTags join table"
+  ],
+  "exact_source_files": [
+    "AlertService.Models/Tag.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/Migrations/",
+    "database/02_AlertServiceDb_Migrations.sql",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.DTO/Requests/AddTagsRequest.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data.SQL/Migrations/ (new EF migration + regenerated ModelSnapshot)",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "database/02_AlertServiceDb_Migrations.sql"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database"
+  ],
+  "constraints": [
+    "Slice is intentionally broader than the 5-file soft cap: the many-to-many tagging feature spans Models, Data, Data.SQL, DTO, Common, and API layers end-to-end.",
+    "Tag is a first-class entity (Id, Name) with a unique index on normalized Name; many-to-many via EF-managed join table AlertTags.",
+    "Case-insensitive normalization/dedup; trim input; reject empties; store a single canonical representation.",
+    "Max 10 tags per alert enforced in the service after dedup against existing assignments; each tag 1-30 chars after trim.",
+    "DELETE returns 404 for both alert-missing and assignment-missing cases.",
+    "GetByIdAsync/GetAllAsync must Include Tags so AlertResponse.Tags is populated (reconcile AsNoTracking + Include).",
+    "Repository is the only EF boundary; service must not reference EF Core. Follow existing conventions: AlertConstants, DataAnnotations + IValidatableObject, manual mapping extensions, enum-as-string, UTC datetime2.",
+    "Migrations are authoritative; also update idempotent SQL mirror database/02_AlertServiceDb_Migrations.sql.",
+    "Security: validate tag input at trust boundary; parameterized EF LINQ (no injection); no secrets; errors must not leak internals."
+  ],
+  "validation_commands": [
+    "dotnet build",
+    "dotnet test"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "reproduction_commands": [],
+  "coverage_goals": [],
+  "test_file_strategy": "edit_existing_unit_test_file",
+  "desired_test_layer": "unit",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "Canonical tag casing (lowercase vs first-seen) to confirm during implement-story; default to case-insensitive normalization."
+  ]
+}

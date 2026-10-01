@@ -1,3 +1,4 @@
+using AlertService.API.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AlertService.API.Middleware;
@@ -21,6 +22,21 @@ public class ExceptionHandlingMiddleware
         try
         {
             await _next(context);
+        }
+        catch (AlertValidationException ex)
+        {
+            _logger.LogWarning("Validation failed for {Method} {Path}: {Message}", context.Request.Method, context.Request.Path, ex.Message);
+
+            var validationProblem = new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = ex.Message,
+                Instance = context.Request.Path
+            };
+            validationProblem.Extensions["traceId"] = context.TraceIdentifier;
+
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(validationProblem, options: null, contentType: "application/problem+json");
         }
         catch (Exception ex)
         {

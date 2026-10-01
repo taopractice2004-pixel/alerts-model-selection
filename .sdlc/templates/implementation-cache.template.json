@@ -1,0 +1,50 @@
+{
+  "work_type": "{{story | bug | testcase}}",
+  "work_id": "{{STORY_ID | BUG_ID | WORK_ID}}",
+  "story_case": "{{SIMPLE | AMBIGUOUS | STALE_REPLAN}}",
+  "bug_case": "{{BUGFIX or empty}}",
+  "testcase_case": "{{TESTCASE or empty}}",
+  "relationship_mode": "{{standalone | current_story | existing_work_id | empty}}",
+  "effort_mode": "{{low | standard | deep}}",
+  "repository_mode": "{{MODE_A_NEW_PROJECT | MODE_B_NEW_PROJECT_WITH_DOCS | MODE_C_EXISTING_PROJECT}}",
+  "summary": "{{short story summary or bug summary or testcase summary}}",
+  "scope_anchors": [
+    "{{suspected file | module | failing test | stack trace location | endpoint | class | function}}"
+  ],
+  "exact_source_files": [
+    "{{path}}"
+  ],
+  "exact_test_files": [
+    "{{path or NOT_AVAILABLE}}"
+  ],
+  "adjacent_dependencies": [
+    "{{path or None}}"
+  ],
+  "selected_standards": [
+    "{{standard id from .sdlc/context/standards-index.json, e.g. coding | backend-dotnet | api-rest | database | service-architecture | frontend-react | ui}}"
+  ],
+  "constraints": [
+    "{{constraint}}"
+  ],
+  "validation_commands": [
+    "{{command}}"
+  ],
+  "coverage_commands": [
+    "{{command or NOT_CONFIGURED}}"
+  ],
+  "reproduction_commands": [
+    "{{command or empty}}"
+  ],
+  "coverage_goals": [
+    "{{line | branch | function | statement | behavior coverage goal for target scope}}"
+  ],
+  "test_file_strategy": "{{edit_existing_unit_test_file_or_create_new_one}}",
+  "desired_test_layer": "{{unit or empty}}",
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "{{fact missing from local work cache or empty}}"
+  ],
+  "unresolved_questions": [
+    "{{question or empty}}"
+  ]
+}
