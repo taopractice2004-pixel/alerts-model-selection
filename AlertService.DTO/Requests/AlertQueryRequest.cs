@@ -30,6 +30,9 @@ public class AlertQueryRequest : IValidatableObject
     [StringLength(AlertConstants.SearchMaxLength)]
     public string? Search { get; set; }
 
+    [StringLength(AlertConstants.TagMaxLength)]
+    public string? Tag { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CreatedFrom.HasValue && CreatedTo.HasValue && CreatedFrom.Value > CreatedTo.Value)

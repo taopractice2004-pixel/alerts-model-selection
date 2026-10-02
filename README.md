@@ -43,15 +43,23 @@ only to register it in DI (`services.AddSqlDataAccess(configuration)`).
 
 | Method | Route               | Success          | Errors      |
 |--------|---------------------|------------------|-------------|
-| POST   | `/api/alerts`       | 201 + `Location` | 400         |
+| POST   | `/api/alerts`       | 201 + `Location`, or 200 + existing alert with `X-Duplicate-Suppressed: true` | 400         |
 | GET    | `/api/alerts`       | 200 + paged body | 400         |
 | GET    | `/api/alerts/summary` | 200 + aggregate body | -      |
+| GET    | `/api/alerts/trends` | 200 + daily buckets | 400    |
 | GET    | `/api/alerts/{id}`  | 200              | 404         |
 | PUT    | `/api/alerts/{id}`  | 200              | 400, 404    |
 | PATCH  | `/api/alerts/{id}/deactivate` | 200      | 404         |
 | DELETE | `/api/alerts/{id}`  | 204              | 404         |
+| POST   | `/api/alerts/{id}/tags` | 200 + alert  | 400, 404    |
+| DELETE | `/api/alerts/{id}/tags/{tag}` | 204    | 404         |
 
 `severity` is sent and returned as a string: `Low`, `Medium`, `High` or `Critical`.
+
+`POST /api/alerts` suppresses near-duplicates: if an active alert with the same title (case-insensitive) and severity
+was created within the last `AlertSuppression:DuplicateWindowMinutes` minutes (`appsettings.json`, `15` by default;
+`0` or a missing value disables suppression), no row is created and the existing alert is returned with `200 OK` and the
+header `X-Duplicate-Suppressed: true`.
 
 `GET /api/alerts` supports optional query parameters:
 - `isActive=true|false`
@@ -61,13 +69,19 @@ only to register it in DI (`services.AddSqlDataAccess(configuration)`).
 - `sortBy=createdDate|severity|title` (default `createdDate`)
 - `sortDirection=asc|desc` (default `desc`)
 - `search=<title fragment>` (case-insensitive, max `200` chars)
+- `tag=<name>` (exact, case-insensitive, max `30` chars)
 
 This endpoint now returns a paged response wrapper. That is a breaking response-contract change from the previous raw array response.
+
+`GET /api/alerts/trends` supports one optional query parameter: `days=7` (range `1..90`). It returns one bucket per UTC
+calendar day for the last `days` days (ending today, oldest first); days and severities without alerts have count `0`.
+An out-of-range or non-numeric `days` returns `400` with `ValidationProblemDetails`.
 
 Examples:
 - `GET /api/alerts?severity=Critical`
 - `GET /api/alerts?severity=Critical&isActive=true&page=2&pageSize=10&sortBy=title&sortDirection=asc&search=disk`
 - `GET /api/alerts/summary`
+- `GET /api/alerts/trends?days=30`
 - `PATCH /api/alerts/1/deactivate`
 
 ```json
@@ -102,6 +116,17 @@ GET /api/alerts/summary
     "high": 1,
     "critical": 2
   }
+}
+```
+
+```json
+GET /api/alerts/trends?days=2
+{
+  "days": 2,
+  "buckets": [
+    { "date": "2026-10-01", "totalCount": 0, "severityCounts": { "low": 0, "medium": 0, "high": 0, "critical": 0 } },
+    { "date": "2026-10-02", "totalCount": 3, "severityCounts": { "low": 1, "medium": 0, "high": 1, "critical": 1 } }
+  ]
 }
 ```
 

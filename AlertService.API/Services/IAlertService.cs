@@ -14,7 +14,11 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    /// <returns>One bucket per UTC day for the last <c>Days</c> days (ending today), oldest first, with zero-filled counts.</returns>
+    Task<AlertTrendsResponse> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns>The created alert, or the existing alert when a recent active duplicate suppresses creation.</returns>
+    Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);
@@ -24,4 +28,9 @@ public interface IAlertService
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<AddTagsResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> if the tag was removed, <c>false</c> if the alert or the tag assignment was not found.</returns>
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 }

@@ -4,7 +4,10 @@ using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moq;
 
 namespace AlertService.API.Tests.Controllers;
@@ -209,10 +212,34 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithTrendsFromService()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 2 };
+        var trends = new AlertTrendsResponse
+        {
+            Days = 2,
+            Buckets =
+            [
+                new AlertTrendBucketResponse { Date = new DateOnly(2026, 8, 31), TotalCount = 0 },
+                new AlertTrendBucketResponse { Date = new DateOnly(2026, 9, 1), TotalCount = 3 }
+            ]
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(trends);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertTrendsResponse>(ok.Value);
+        Assert.Same(trends, body);
+        _service.Verify(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(5), false));
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -220,6 +247,21 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+        Assert.False(_controller.Response.Headers.ContainsKey("X-Duplicate-Suppressed"));
+    }
+
+    [Fact]
+    public async Task Create_Suppressed_ReturnsOkWithExistingAlert()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(3), true));
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(3, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal("true", _controller.Response.Headers["X-Duplicate-Suppressed"].ToString());
     }
 
     [Fact]
@@ -282,5 +324,78 @@ public class AlertsControllerTests
         var result = await _controller.Delete(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAdded_ReturnsOkWithAlert()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "disk" } };
+        var alert = SampleResponse();
+        alert.Tags = new List<string> { "disk" };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddTagsResult(AddTagsStatus.Added, alert));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "disk" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "disk" } };
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddTagsResult(AddTagsStatus.AlertNotFound));
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenLimitExceeded_ReturnsBadRequest_WithTagsError()
+    {
+        _controller.ProblemDetailsFactory = new StubProblemDetailsFactory();
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "disk" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddTagsResult(AddTagsStatus.TagLimitExceeded));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
+        var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Equal(new[] { "An alert can have at most 10 tags." }, problem.Errors["Tags"]);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "disk", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "disk", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenNotFound_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(99, "disk", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(99, "disk", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    private sealed class StubProblemDetailsFactory : ProblemDetailsFactory
+    {
+        public override ProblemDetails CreateProblemDetails(HttpContext httpContext, int? statusCode = null, string? title = null, string? type = null, string? detail = null, string? instance = null)
+            => new() { Status = statusCode ?? StatusCodes.Status500InternalServerError, Title = title, Type = type, Detail = detail, Instance = instance };
+
+        public override ValidationProblemDetails CreateValidationProblemDetails(HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null, string? title = null, string? type = null, string? detail = null, string? instance = null)
+            => new(modelStateDictionary) { Status = statusCode ?? StatusCodes.Status400BadRequest, Title = title, Type = type, Detail = detail, Instance = instance };
     }
 }
