@@ -312,6 +312,53 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDailyCountsAsync_GroupsByUtcDayAndSeverity_WithinWindow()
+    {
+        var day1 = new DateTime(2026, 5, 10, 0, 0, 0, DateTimeKind.Utc);
+        var day2 = new DateTime(2026, 5, 11, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("A", Severity.High, day1.AddHours(2)));
+        await _repository.AddAsync(NewAlert("B", Severity.High, day1.AddHours(20)));
+        await _repository.AddAsync(NewAlert("C", Severity.Low, day1.AddHours(5)));
+        await _repository.AddAsync(NewAlert("D", Severity.Critical, day2.AddHours(1)));
+
+        var result = await _repository.GetDailyCountsAsync(day1, day2.AddDays(1));
+
+        Assert.Equal(3, result.Count);
+        Assert.Contains(result, e => e.Day == day1 && e.Severity == Severity.High && e.Count == 2);
+        Assert.Contains(result, e => e.Day == day1 && e.Severity == Severity.Low && e.Count == 1);
+        Assert.Contains(result, e => e.Day == day2 && e.Severity == Severity.Critical && e.Count == 1);
+    }
+
+    [Fact]
+    public async Task GetDailyCountsAsync_ExcludesAlertsOutsideWindow()
+    {
+        var from = new DateTime(2026, 5, 10, 0, 0, 0, DateTimeKind.Utc);
+        var toExclusive = new DateTime(2026, 5, 12, 0, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Before", Severity.High, from.AddSeconds(-1)));
+        await _repository.AddAsync(NewAlert("AtStart", Severity.High, from));
+        await _repository.AddAsync(NewAlert("AtEndExclusive", Severity.High, toExclusive));
+
+        var result = await _repository.GetDailyCountsAsync(from, toExclusive);
+
+        var entry = Assert.Single(result);
+        Assert.Equal(from, entry.Day);
+        Assert.Equal(Severity.High, entry.Severity);
+        Assert.Equal(1, entry.Count);
+    }
+
+    [Fact]
+    public async Task GetDailyCountsAsync_WhenNoAlertsInWindow_ReturnsEmpty()
+    {
+        await _repository.AddAsync(NewAlert("Outside", Severity.High, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailyCountsAsync(
+            new DateTime(2026, 5, 10, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 5, 17, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
@@ -482,5 +529,84 @@ public class AlertRepositoryTests : IDisposable
         Assert.Equal(1, await _context.Set<Tag>().CountAsync());
         var reloaded = await _context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == secondAlert.Id);
         Assert.Equal("shared", reloaded.Tags.Single().Name);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenActiveMatchWithinWindow_ReturnsAlert()
+    {
+        var created = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, created.AddMinutes(-15));
+
+        Assert.NotNull(result);
+        Assert.Equal("Disk full", result!.Title);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_MatchesCaseInsensitiveTrimmedTitle()
+    {
+        var created = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk Full", Severity.High, created));
+
+        var result = await _repository.FindActiveDuplicateAsync("  disk full  ", Severity.High, created.AddMinutes(-15));
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_IgnoresInactiveAlert()
+    {
+        var created = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created, isActive: false));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, created.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_IgnoresDifferentSeverity()
+    {
+        var created = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.Critical, created.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_IgnoresAlertCreatedBeforeThreshold()
+    {
+        var created = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, created.AddMinutes(1));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenMultipleMatch_ReturnsMostRecent()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 3, 1, 12, 10, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, new DateTime(2026, 3, 1, 11, 0, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(result);
+        Assert.Equal(new DateTime(2026, 3, 1, 12, 10, 0, DateTimeKind.Utc), result!.CreatedDate);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenNoMatch_ReturnsNull()
+    {
+        var created = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created));
+
+        var result = await _repository.FindActiveDuplicateAsync("Memory leak", Severity.High, created.AddMinutes(-15));
+
+        Assert.Null(result);
     }
 }

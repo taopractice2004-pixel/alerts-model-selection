@@ -1,4 +1,5 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -47,14 +48,31 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
-    /// <summary>Creates a new alert.</summary>
+    /// <summary>Gets daily alert-creation counts by severity for the last N UTC calendar days.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(AlertTrendsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AlertTrendsResponse>> GetTrends([FromQuery] AlertTrendsQueryRequest request, CancellationToken cancellationToken)
+    {
+        var trends = await _alertService.GetTrendsAsync(request, cancellationToken);
+        return Ok(trends);
+    }
+
+    /// <summary>Creates a new alert, or returns the existing alert when it is a suppressed near-duplicate.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
-        var created = await _alertService.CreateAsync(request, cancellationToken);
-        return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
+        var result = await _alertService.CreateAsync(request, cancellationToken);
+        if (result.WasSuppressed)
+        {
+            Response.Headers[AlertConstants.DuplicateSuppressedHeader] = AlertConstants.DuplicateSuppressedHeaderValue;
+            return Ok(result.Alert);
+        }
+
+        return CreatedAtRoute(nameof(GetById), new { id = result.Alert.Id }, result.Alert);
     }
 
     /// <summary>Updates an existing alert.</summary>

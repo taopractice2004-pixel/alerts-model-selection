@@ -1,9 +1,12 @@
+using AlertService.API.Configuration;
 using AlertService.API.Mappings;
 using AlertService.Common.Constants;
+using AlertService.Common.Enums;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using AlertService.Models;
+using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations;
 
 namespace AlertService.API.Services;
@@ -14,15 +17,18 @@ public class AlertManagementService : IAlertService
     private readonly IAlertRepository _repository;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AlertManagementService> _logger;
+    private readonly AlertSuppressionOptions _suppressionOptions;
 
     public AlertManagementService(
         IAlertRepository repository,
         TimeProvider timeProvider,
-        ILogger<AlertManagementService> logger)
+        ILogger<AlertManagementService> logger,
+        IOptions<AlertSuppressionOptions> suppressionOptions)
     {
         _repository = repository;
         _timeProvider = timeProvider;
         _logger = logger;
+        _suppressionOptions = suppressionOptions.Value;
     }
 
     public async Task<PagedResponse<AlertResponse>> GetAllAsync(AlertQueryRequest request, CancellationToken cancellationToken = default)
@@ -83,15 +89,73 @@ public class AlertManagementService : IAlertService
         };
     }
 
-    public async Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    public async Task<AlertTrendsResponse> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);
+        var today = _timeProvider.GetUtcNow().UtcDateTime.Date;
+        var fromInclusiveUtc = today.AddDays(-(request.Days - 1));
+        var toExclusiveUtc = today.AddDays(1);
+
+        var dailyCounts = await _repository.GetDailyCountsAsync(fromInclusiveUtc, toExclusiveUtc, cancellationToken);
+        var countsByDay = dailyCounts
+            .GroupBy(entry => entry.Day)
+            .ToDictionary(group => group.Key, group => group.ToDictionary(entry => entry.Severity, entry => entry.Count));
+
+        var buckets = new List<AlertTrendBucketResponse>(request.Days);
+        for (var offset = 0; offset < request.Days; offset++)
+        {
+            var day = fromInclusiveUtc.AddDays(offset);
+            countsByDay.TryGetValue(day, out var severityCounts);
+
+            var low = GetCount(severityCounts, Severity.Low);
+            var medium = GetCount(severityCounts, Severity.Medium);
+            var high = GetCount(severityCounts, Severity.High);
+            var critical = GetCount(severityCounts, Severity.Critical);
+
+            buckets.Add(new AlertTrendBucketResponse
+            {
+                Date = day,
+                TotalCount = low + medium + high + critical,
+                SeverityCounts = new AlertSeverityCountsResponse
+                {
+                    Low = low,
+                    Medium = medium,
+                    High = high,
+                    Critical = critical
+                }
+            });
+        }
+
+        return new AlertTrendsResponse
+        {
+            Days = request.Days,
+            Buckets = buckets
+        };
+    }
+
+    private static int GetCount(IReadOnlyDictionary<Severity, int>? severityCounts, Severity severity) =>
+        severityCounts is not null && severityCounts.TryGetValue(severity, out var count) ? count : 0;
+
+    public async Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var createdOnOrAfter = nowUtc.AddMinutes(-_suppressionOptions.WindowMinutes);
+
+        var duplicate = await _repository.FindActiveDuplicateAsync(request.Title, request.Severity, createdOnOrAfter, cancellationToken);
+        if (duplicate is not null)
+        {
+            _logger.LogInformation("Suppressed duplicate alert for title {Title} and severity {Severity}; existing alert {AlertId}", duplicate.Title, duplicate.Severity, duplicate.Id);
+            return new CreateAlertResult(duplicate.ToResponse(), WasSuppressed: true);
+        }
+
+        var alert = request.ToEntity(nowUtc);
         var created = await _repository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation("Created alert {AlertId} with severity {Severity}", created.Id, created.Severity);
-        return created.ToResponse();
+        return new CreateAlertResult(created.ToResponse(), WasSuppressed: false);
     }
 
     public async Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default)

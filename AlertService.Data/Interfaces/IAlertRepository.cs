@@ -25,7 +25,19 @@ public interface IAlertRepository
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
         CancellationToken cancellationToken = default);
 
+    /// <returns>Per-day, per-severity alert-creation counts for alerts created in
+    /// [<paramref name="fromInclusiveUtc"/>, <paramref name="toExclusiveUtc"/>). Only non-empty
+    /// day/severity groups are returned; callers fill missing days and severities with zero.</returns>
+    Task<IReadOnlyList<(DateTime Day, Severity Severity, int Count)>> GetDailyCountsAsync(
+        DateTime fromInclusiveUtc,
+        DateTime toExclusiveUtc,
+        CancellationToken cancellationToken = default);
+
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <returns>The most recent active alert with the same title (case-insensitive) and severity
+    /// created on or after <paramref name="createdOnOrAfterUtc"/>, or <c>null</c> if none exists.</returns>
+    Task<Alert?> FindActiveDuplicateAsync(string title, Severity severity, DateTime createdOnOrAfterUtc, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Tag>> GetTagsByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default);
 

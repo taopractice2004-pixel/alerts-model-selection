@@ -1,9 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using AlertService.API.Controllers;
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -209,10 +211,88 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithTrends()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 7 };
+        var trends = new AlertTrendsResponse
+        {
+            Days = 7,
+            Buckets = new List<AlertTrendBucketResponse>
+            {
+                new()
+                {
+                    Date = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    TotalCount = 3,
+                    SeverityCounts = new AlertSeverityCountsResponse { Low = 1, High = 2 }
+                }
+            }
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(trends);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertTrendsResponse>(ok.Value);
+        Assert.Equal(7, body.Days);
+        Assert.Single(body.Buckets);
+        Assert.Equal(3, body.Buckets[0].TotalCount);
+    }
+
+    [Fact]
+    public async Task GetTrends_PassesRequestToService()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 30 };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTrendsResponse { Days = 30 });
+
+        _ = await _controller.GetTrends(request, CancellationToken.None);
+
+        _service.Verify(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void AlertTrendsQueryRequest_DefaultsToSevenDays()
+    {
+        var request = new AlertTrendsQueryRequest();
+
+        Assert.Equal(7, request.Days);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(91)]
+    public void AlertTrendsQueryRequest_WithDaysOutOfRange_FailsValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertTrendsQueryRequest.Days)));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(90)]
+    public void AlertTrendsQueryRequest_WithDaysInRange_PassesValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.True(isValid);
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(5), false));
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -220,6 +300,20 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+    }
+
+    [Fact]
+    public async Task Create_WhenSuppressed_ReturnsOkWithDuplicateHeader()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(5), true));
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(5, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal(AlertConstants.DuplicateSuppressedHeaderValue, _controller.Response.Headers[AlertConstants.DuplicateSuppressedHeader]);
     }
 
     [Fact]

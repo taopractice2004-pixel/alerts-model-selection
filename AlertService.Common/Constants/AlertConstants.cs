@@ -19,4 +19,11 @@ public static class AlertConstants
     public const int TagMinLength = 1;
     public const int TagMaxLength = 30;
     public const int MaxTagsPerAlert = 10;
+    public const string DuplicateSuppressedHeader = "X-Duplicate-Suppressed";
+    public const string DuplicateSuppressedHeaderValue = "true";
+    public const string AlertSuppressionSection = "AlertSuppression";
+    public const int DefaultSuppressionWindowMinutes = 15;
+    public const int DefaultTrendDays = 7;
+    public const int MinTrendDays = 1;
+    public const int MaxTrendDays = 90;
 }

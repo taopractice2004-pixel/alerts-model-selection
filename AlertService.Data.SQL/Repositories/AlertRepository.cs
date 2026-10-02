@@ -96,6 +96,28 @@ public class AlertRepository : IAlertRepository
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
     }
 
+    public async Task<IReadOnlyList<(DateTime Day, Severity Severity, int Count)>> GetDailyCountsAsync(
+        DateTime fromInclusiveUtc,
+        DateTime toExclusiveUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = await _context.Alerts
+            .AsNoTracking()
+            .Where(alert => alert.CreatedDate >= fromInclusiveUtc && alert.CreatedDate < toExclusiveUtc)
+            .GroupBy(alert => new { Day = alert.CreatedDate.Date, alert.Severity })
+            .Select(group => new
+            {
+                group.Key.Day,
+                group.Key.Severity,
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return groups
+            .Select(group => (group.Day, group.Severity, group.Count))
+            .ToList();
+    }
+
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
     {
         var normalizedSortBy = sortBy.Trim();
@@ -134,6 +156,21 @@ public class AlertRepository : IAlertRepository
         return _context.Alerts
             .Include(a => a.Tags)
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public Task<Alert?> FindActiveDuplicateAsync(string title, Severity severity, DateTime createdOnOrAfterUtc, CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLower();
+
+        return _context.Alerts
+            .AsNoTracking()
+            .Include(a => a.Tags)
+            .Where(a => a.IsActive
+                && a.Severity == severity
+                && a.CreatedDate >= createdOnOrAfterUtc
+                && a.Title.ToLower() == normalizedTitle)
+            .OrderByDescending(a => a.CreatedDate)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Tag>> GetTagsByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default)
