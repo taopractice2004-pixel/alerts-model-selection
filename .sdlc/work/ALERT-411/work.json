@@ -1,0 +1,65 @@
+{
+  "work_id": "ALERT-411",
+  "work_type": "story",
+  "related_work_id": "",
+  "summary": "Suppress near-duplicate alerts on POST /api/alerts within a configurable window.",
+  "effort_mode": "low",
+  "status": "COMPLETE",
+  "waiting_for_human": null,
+  "analyzed_at_commit": "6ed99a2793bf1aa836def5395082f9e4fbb1d7b6",
+  "scope_anchors": [],
+  "files_changed": {
+    "production": [
+      "AlertService.Common/Constants/AlertConstants.cs",
+      "AlertService.Data/Interfaces/IAlertRepository.cs",
+      "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+      "AlertService.API/Configuration/AlertSuppressionOptions.cs",
+      "AlertService.API/Services/CreateAlertResult.cs",
+      "AlertService.API/Services/IAlertService.cs",
+      "AlertService.API/Services/AlertManagementService.cs",
+      "AlertService.API/Controllers/AlertsController.cs",
+      "AlertService.API/Program.cs",
+      "AlertService.API/appsettings.json"
+    ],
+    "tests": [
+      "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+      "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+      "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+    ]
+  },
+  "selected_standards": [
+    "Backend / API",
+    "Data Access",
+    "Testing",
+    "General",
+    "Security"
+  ],
+  "commands": {
+    "build": [
+      { "working_directory": ".", "command": "dotnet build AlertService.sln -c Debug --nologo -v minimal" }
+    ],
+    "type_check": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED (type checking is part of the C# build)" }
+    ],
+    "lint": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED (no analyzer ruleset or .editorconfig present)" }
+    ],
+    "unit_test": [
+      { "working_directory": ".", "command": "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertManagementServiceTests|FullyQualifiedName~AlertsControllerTests\" --nologo -v minimal" },
+      { "working_directory": ".", "command": "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\" --nologo -v minimal" }
+    ],
+    "regression_test": [
+      { "working_directory": ".", "command": "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --nologo -v minimal" }
+    ],
+    "integration_test": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED (no separate integration suite)" }
+    ],
+    "coverage": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED" }
+    ]
+  },
+  "coverage_goal": "NOT_CONFIGURED",
+  "defects": [],
+  "behaviors_to_cover": [],
+  "missing_facts": []
+}

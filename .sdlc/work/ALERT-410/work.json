@@ -1,0 +1,73 @@
+{
+  "work_id": "ALERT-410",
+  "work_type": "story",
+  "related_work_id": "",
+  "summary": "Alert tagging: Tag entity + many-to-many with Alert, add/remove tag endpoints, composable tag filter, tags in AlertResponse.",
+  "effort_mode": "low",
+  "status": "COMPLETE",
+  "waiting_for_human": null,
+  "analyzed_at_commit": "83033e09d24268b1cc56cfaead3d95e9f365c3ba",
+  "scope_anchors": [],
+  "files_changed": {
+    "production": [
+      "AlertService.Models/Tag.cs",
+      "AlertService.Models/Alert.cs",
+      "AlertService.Common/Constants/AlertConstants.cs",
+      "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+      "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+      "AlertService.DTO/Responses/AlertResponse.cs",
+      "AlertService.DTO/Requests/AlertQueryRequest.cs",
+      "AlertService.DTO/Requests/AddTagsRequest.cs",
+      "AlertService.Data/Interfaces/IAlertRepository.cs",
+      "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+      "AlertService.API/Services/IAlertService.cs",
+      "AlertService.API/Services/AlertManagementService.cs",
+      "AlertService.API/Mappings/AlertMappingExtensions.cs",
+      \"AlertService.API/Controllers/AlertsController.cs\",
+      \"AlertService.Data.SQL/Migrations/20261002104216_AddAlertTags.cs\",
+      \"AlertService.Data.SQL/Migrations/20261002104216_AddAlertTags.Designer.cs\",
+      \"AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs\",
+      \"database/02_AlertServiceDb_Migrations.sql\"
+    ],
+    "tests": [
+      "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+      "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+      "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+    ]
+  },
+  "selected_standards": [
+    "General",
+    "Backend / API",
+    "Data Access",
+    "Testing",
+    "Security"
+  ],
+  "commands": {
+    "build": [
+      { "working_directory": ".", "command": "dotnet build AlertService.sln -c Debug --nologo -v minimal" }
+    ],
+    "type_check": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED (type checking is part of the C# build)" }
+    ],
+    "lint": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED (no analyzer ruleset or .editorconfig present)" }
+    ],
+    "unit_test": [
+      { "working_directory": ".", "command": "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertManagementServiceTests|FullyQualifiedName~AlertsControllerTests\" --nologo -v minimal" },
+      { "working_directory": ".", "command": "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\" --nologo -v minimal" }
+    ],
+    "regression_test": [
+      { "working_directory": ".", "command": "dotnet test AlertService.sln --nologo -v minimal" }
+    ],
+    "integration_test": [
+      { "working_directory": ".", "command": "NOT_CONFIGURED (no separate integration suite; health-check tests run within AlertService.API.Tests)" }
+    ],
+    "coverage": [
+      { "working_directory": ".", "command": "dotnet test AlertService.sln --collect:\"XPlat Code Coverage\" --nologo -v minimal" }
+    ]
+  },
+  "coverage_goal": "NOT_CONFIGURED",
+  "defects": [],
+  "behaviors_to_cover": [],
+  "missing_facts": []
+}
