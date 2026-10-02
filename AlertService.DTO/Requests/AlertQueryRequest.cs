@@ -30,6 +30,9 @@ public class AlertQueryRequest : IValidatableObject
     [StringLength(AlertConstants.SearchMaxLength)]
     public string? Search { get; set; }
 
+    [StringLength(AlertConstants.TagMaxLength)]
+    public string? Tag { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CreatedFrom.HasValue && CreatedTo.HasValue && CreatedFrom.Value > CreatedTo.Value)
@@ -37,6 +40,17 @@ public class AlertQueryRequest : IValidatableObject
             yield return new ValidationResult(
                 "CreatedFrom must be less than or equal to CreatedTo.",
                 new[] { nameof(CreatedFrom), nameof(CreatedTo) });
+        }
+
+        if (Tag is not null)
+        {
+            var normalizedTag = Tag.Trim();
+            if (normalizedTag.Length == 0 || normalizedTag.Length > AlertConstants.TagMaxLength)
+            {
+                yield return new ValidationResult(
+                    $"Tag must be between 1 and {AlertConstants.TagMaxLength} characters.",
+                    new[] { nameof(Tag) });
+            }
         }
     }
 }

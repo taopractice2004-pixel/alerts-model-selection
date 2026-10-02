@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using AlertService.API.Extensions;
 using AlertService.API.Middleware;
+using AlertService.API.Options;
 using AlertService.API.Services;
 using AlertService.Data.SQL.Extensions;
 using Microsoft.AspNetCore.Http;
@@ -32,6 +33,11 @@ try
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+    builder.Services
+        .AddOptions<AlertSuppressionOptions>()
+        .Bind(builder.Configuration.GetSection(AlertSuppressionOptions.SectionName))
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
 
     builder.Services.AddSqlDataAccess(builder.Configuration);   // DbContext + repositories
     builder.Services.AddAlertHealthChecks();

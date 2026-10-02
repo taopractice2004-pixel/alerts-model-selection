@@ -312,6 +312,48 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDailySeverityCountsAsync_WhenNoAlertsInRange_ReturnsEmpty()
+    {
+        await _repository.AddAsync(NewAlert("Before", Severity.Low, new DateTime(2026, 8, 29, 23, 59, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("After", Severity.High, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetDailySeverityCountsAsync_GroupsByUtcDayAndSeverityWithinRange()
+    {
+        await _repository.AddAsync(NewAlert("Out of range low", Severity.Low, new DateTime(2026, 8, 29, 23, 59, 59, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Day1 low", Severity.Low, new DateTime(2026, 8, 30, 1, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Day1 high", Severity.High, new DateTime(2026, 8, 30, 12, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Day3 medium", Severity.Medium, new DateTime(2026, 9, 1, 5, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Day3 critical", Severity.Critical, new DateTime(2026, 9, 1, 23, 59, 59, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("End boundary", Severity.Critical, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(2, result.Count);
+
+        Assert.Equal(new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc), result[0].DayUtc);
+        Assert.Equal(1, result[0].LowCount);
+        Assert.Equal(0, result[0].MediumCount);
+        Assert.Equal(1, result[0].HighCount);
+        Assert.Equal(0, result[0].CriticalCount);
+
+        Assert.Equal(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), result[1].DayUtc);
+        Assert.Equal(0, result[1].LowCount);
+        Assert.Equal(1, result[1].MediumCount);
+        Assert.Equal(0, result[1].HighCount);
+        Assert.Equal(1, result[1].CriticalCount);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
@@ -327,6 +369,35 @@ public class AlertRepositoryTests : IDisposable
     public async Task GetByIdAsync_WhenMissing_ReturnsNull()
     {
         var result = await _repository.GetByIdAsync(999);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindLatestActiveByTitleAndSeverityAsync_ReturnsMostRecentCaseInsensitiveMatchWithinWindow()
+    {
+        var windowStart = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        await _repository.AddAsync(NewAlert("Disk Full", Severity.High, new DateTime(2026, 6, 1, 12, 2, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("disk full", Severity.High, new DateTime(2026, 6, 1, 12, 5, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindLatestActiveByTitleAndSeverityAsync("  DISK FULL  ", Severity.High, windowStart);
+
+        Assert.NotNull(result);
+        Assert.Equal("disk full", result!.Title);
+        Assert.Equal(new DateTime(2026, 6, 1, 12, 5, 0, DateTimeKind.Utc), result.CreatedDate);
+    }
+
+    [Fact]
+    public async Task FindLatestActiveByTitleAndSeverityAsync_ExcludesInactiveOutOfWindowAndDifferentSeverity()
+    {
+        var windowStart = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        await _repository.AddAsync(NewAlert("CPU spike", Severity.High, new DateTime(2026, 6, 1, 12, 6, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical, new DateTime(2026, 6, 1, 12, 7, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("CPU spike", Severity.High, new DateTime(2026, 6, 1, 11, 59, 59, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindLatestActiveByTitleAndSeverityAsync("cpu spike", Severity.High, windowStart);
 
         Assert.Null(result);
     }
