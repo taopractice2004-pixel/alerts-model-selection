@@ -20,6 +20,7 @@ public class AlertRepository : IAlertRepository
         Severity? severity = null,
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
+        string? tag = null,
         string? search = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
@@ -27,7 +28,10 @@ public class AlertRepository : IAlertRepository
         int pageSize = AlertConstants.DefaultPageSize,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Alert> query = _context.Alerts.AsNoTracking();
+        IQueryable<Alert> query = _context.Alerts
+            .AsNoTracking()
+            .Include(alert => alert.AlertTags)
+            .ThenInclude(alertTag => alertTag.Tag);
 
         if (isActive.HasValue)
         {
@@ -47,6 +51,12 @@ public class AlertRepository : IAlertRepository
         if (createdTo.HasValue)
         {
             query = query.Where(a => a.CreatedDate <= createdTo.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = NormalizeTag(tag);
+            query = query.Where(alert => alert.AlertTags.Any(alertTag => alertTag.Tag.NormalizedName == normalizedTag));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -89,6 +99,35 @@ public class AlertRepository : IAlertRepository
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
     }
 
+    public async Task<IReadOnlyList<(DateTime DayUtc, Severity Severity, int Count)>> GetDailySeverityCountsAsync(
+        DateTime startUtcInclusive,
+        DateTime endUtcExclusive,
+        CancellationToken cancellationToken = default)
+    {
+        var groupedCounts = await _context.Alerts
+            .AsNoTracking()
+            .Where(alert => alert.CreatedDate >= startUtcInclusive)
+            .Where(alert => alert.CreatedDate < endUtcExclusive)
+            .GroupBy(alert => new
+            {
+                DayUtc = alert.CreatedDate.Date,
+                alert.Severity
+            })
+            .Select(group => new
+            {
+                group.Key.DayUtc,
+                group.Key.Severity,
+                Count = group.Count()
+            })
+            .OrderBy(item => item.DayUtc)
+            .ThenBy(item => item.Severity)
+            .ToListAsync(cancellationToken);
+
+        return groupedCounts
+            .Select(item => (item.DayUtc, item.Severity, item.Count))
+            .ToList();
+    }
+
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
     {
         var normalizedSortBy = sortBy.Trim();
@@ -124,13 +163,143 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(alert => alert.AlertTags)
+            .ThenInclude(alertTag => alertTag.Tag)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public Task<Alert?> FindRecentActiveDuplicateAsync(
+        string title,
+        Severity severity,
+        DateTime createdAfterUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLowerInvariant();
+
+        return _context.Alerts
+            .AsNoTracking()
+            .Include(alert => alert.AlertTags)
+            .ThenInclude(alertTag => alertTag.Tag)
+            .Where(alert => alert.IsActive)
+            .Where(alert => alert.Severity == severity)
+            .Where(alert => alert.CreatedDate >= createdAfterUtc)
+            .Where(alert => alert.Title.ToLower() == normalizedTitle)
+            .OrderByDescending(alert => alert.CreatedDate)
+            .ThenByDescending(alert => alert.Id)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
     {
         await _context.Alerts.AddAsync(alert, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        return alert;
+    }
+
+    public async Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        var alert = await _context.Alerts
+            .Include(existingAlert => existingAlert.AlertTags)
+            .ThenInclude(alertTag => alertTag.Tag)
+            .FirstOrDefaultAsync(existingAlert => existingAlert.Id == alertId, cancellationToken);
+
+        if (alert is null)
+        {
+            return null;
+        }
+
+        var requestedTags = tags
+            .Select(tag => tag.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (requestedTags.Count == 0)
+        {
+            return alert;
+        }
+
+        var requestedNormalizedTags = requestedTags
+            .Select(NormalizeTag)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var assignedNormalizedTags = alert.AlertTags
+            .Select(alertTag => alertTag.Tag.NormalizedName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var normalizedTagsToAdd = requestedNormalizedTags
+            .Where(normalizedTag => !assignedNormalizedTags.Contains(normalizedTag))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (normalizedTagsToAdd.Count == 0)
+        {
+            return alert;
+        }
+
+        var existingTags = await _context.Tags
+            .Where(tagEntity => normalizedTagsToAdd.Contains(tagEntity.NormalizedName))
+            .ToListAsync(cancellationToken);
+
+        var tagsByNormalizedName = existingTags.ToDictionary(tagEntity => tagEntity.NormalizedName, StringComparer.Ordinal);
+
+        foreach (var requestedTag in requestedTags)
+        {
+            var normalizedTag = NormalizeTag(requestedTag);
+            if (!normalizedTagsToAdd.Contains(normalizedTag))
+            {
+                continue;
+            }
+
+            if (!tagsByNormalizedName.TryGetValue(normalizedTag, out var tagEntity))
+            {
+                tagEntity = new Tag
+                {
+                    Name = requestedTag,
+                    NormalizedName = normalizedTag
+                };
+
+                _context.Tags.Add(tagEntity);
+                tagsByNormalizedName[normalizedTag] = tagEntity;
+            }
+
+            alert.AlertTags.Add(new AlertTag
+            {
+                Alert = alert,
+                Tag = tagEntity
+            });
+
+            normalizedTagsToAdd.Remove(normalizedTag);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return alert;
+    }
+
+    public async Task<Alert?> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _context.Alerts
+            .Include(existingAlert => existingAlert.AlertTags)
+            .ThenInclude(alertTag => alertTag.Tag)
+            .FirstOrDefaultAsync(existingAlert => existingAlert.Id == alertId, cancellationToken);
+
+        if (alert is null)
+        {
+            return null;
+        }
+
+        var normalizedTag = NormalizeTag(tag);
+        var alertTag = alert.AlertTags
+            .FirstOrDefault(existingAlertTag => existingAlertTag.Tag.NormalizedName == normalizedTag);
+
+        if (alertTag is null)
+        {
+            return null;
+        }
+
+        alert.AlertTags.Remove(alertTag);
+        _context.AlertTags.Remove(alertTag);
+        await _context.SaveChangesAsync(cancellationToken);
+
         return alert;
     }
 
@@ -144,5 +313,10 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string NormalizeTag(string tag)
+    {
+        return tag.Trim().ToUpperInvariant();
     }
 }

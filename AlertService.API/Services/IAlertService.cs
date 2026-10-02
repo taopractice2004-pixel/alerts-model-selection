@@ -14,13 +14,19 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AlertTrendBucketResponse>> GetTrendsAsync(AlertTrendQueryRequest request, CancellationToken cancellationToken = default);
+
+    Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+
+    Task<AlertResponse?> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The deactivated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> DeactivateAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<AlertResponse?> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);

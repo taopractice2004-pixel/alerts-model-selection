@@ -4,6 +4,7 @@ using AlertService.API.Tests.TestInfrastructure;
 
 namespace AlertService.API.Tests;
 
+[Collection(WebApplicationFactoryCollection.Name)]
 public class HealthChecksTests
 {
     [Fact]
