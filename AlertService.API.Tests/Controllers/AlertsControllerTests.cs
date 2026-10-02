@@ -283,4 +283,63 @@ public class AlertsControllerTests
 
         Assert.IsType<NotFoundResult>(result);
     }
+
+    [Fact]
+    public async Task AddTags_WhenServiceReturnsAlert_ReturnsOkWithUpdatedAlert()
+    {
+        var request = new AddTagsRequest { Tags = new List<string> { "network" } };
+        var response = SampleResponse();
+        response.Tags = new List<string> { "network" };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(response);
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "network" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenServiceReturnsNull_ReturnsNotFound()
+    {
+        var request = new AddTagsRequest { Tags = new List<string> { "network" } };
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>())).ReturnsAsync((AlertResponse?)null);
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenServiceThrowsValidationException_ReturnsBadRequest()
+    {
+        var request = new AddTagsRequest { Tags = new List<string> { "network" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ValidationException("An alert can have at most 10 tags."));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenServiceReturnsTrue_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "network", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "network", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenServiceReturnsFalse_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(99, "network", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(99, "network", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
 }

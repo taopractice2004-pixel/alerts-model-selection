@@ -2,6 +2,7 @@ using AlertService.API.Services;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace AlertService.API.Controllers;
 
@@ -85,5 +86,33 @@ public class AlertsController : ControllerBase
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>Adds one or more tags to an alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddTagsRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var updated = await _alertService.AddTagsAsync(id, request, cancellationToken);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (ValidationException ex)
+        {
+            return ValidationProblem(ex.Message);
+        }
+    }
+
+    /// <summary>Removes a tag from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return removed ? NoContent() : NotFound();
     }
 }

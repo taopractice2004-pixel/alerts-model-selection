@@ -1,7 +1,10 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using AlertService.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace AlertService.API.Services;
 
@@ -32,6 +35,7 @@ public class AlertManagementService : IAlertService
             request.CreatedFrom,
             request.CreatedTo,
             request.Search,
+            request.Tag,
             request.SortBy,
             request.SortDirection,
             request.Page,
@@ -142,5 +146,99 @@ public class AlertManagementService : IAlertService
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
+    }
+
+    public async Task<AlertResponse?> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return null;
+        }
+
+        var requestedNames = NormalizeTagNames(request.Tags);
+        var existingNames = alert.Tags
+            .Select(t => t.Name.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var namesToAdd = requestedNames
+            .Where(n => !existingNames.Contains(n))
+            .ToList();
+
+        if (namesToAdd.Count == 0)
+        {
+            return alert.ToResponse();
+        }
+
+        if (alert.Tags.Count + namesToAdd.Count > AlertConstants.MaxTagsPerAlert)
+        {
+            throw new ValidationException($"An alert can have at most {AlertConstants.MaxTagsPerAlert} tags.");
+        }
+
+        var existingTags = await _repository.GetTagsByNamesAsync(namesToAdd, cancellationToken);
+        var existingTagsByName = existingTags
+            .ToDictionary(t => t.Name.Trim(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in namesToAdd)
+        {
+            var tag = existingTagsByName.TryGetValue(name, out var found)
+                ? found
+                : new Tag { Name = name };
+            alert.Tags.Add(tag);
+        }
+
+        await _repository.UpdateAsync(alert, cancellationToken);
+
+        _logger.LogInformation("Added {Count} tag(s) to alert {AlertId}", namesToAdd.Count, id);
+        return alert.ToResponse();
+    }
+
+    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot remove tag from alert {AlertId}: not found", id);
+            return false;
+        }
+
+        var normalizedTag = (tag ?? string.Empty).Trim();
+        var assigned = alert.Tags.FirstOrDefault(t => string.Equals(t.Name, normalizedTag, StringComparison.OrdinalIgnoreCase));
+        if (assigned is null)
+        {
+            _logger.LogWarning("Cannot remove tag {Tag} from alert {AlertId}: not assigned", normalizedTag, id);
+            return false;
+        }
+
+        alert.Tags.Remove(assigned);
+        await _repository.UpdateAsync(alert, cancellationToken);
+
+        _logger.LogInformation("Removed tag {Tag} from alert {AlertId}", normalizedTag, id);
+        return true;
+    }
+
+    private static List<string> NormalizeTagNames(IEnumerable<string> names)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var raw in names)
+        {
+            var trimmed = (raw ?? string.Empty).Trim();
+            if (trimmed.Length < AlertConstants.TagMinLength || trimmed.Length > AlertConstants.TagMaxLength)
+            {
+                throw new ValidationException($"Each tag must be between {AlertConstants.TagMinLength} and {AlertConstants.TagMaxLength} characters.");
+            }
+
+            if (seen.Add(trimmed))
+            {
+                result.Add(trimmed);
+            }
+        }
+
+        return result;
     }
 }

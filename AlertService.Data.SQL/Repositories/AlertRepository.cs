@@ -21,13 +21,14 @@ public class AlertRepository : IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Alert> query = _context.Alerts.AsNoTracking();
+        IQueryable<Alert> query = _context.Alerts.AsNoTracking().Include(a => a.Tags);
 
         if (isActive.HasValue)
         {
@@ -53,6 +54,12 @@ public class AlertRepository : IAlertRepository
         {
             var normalizedSearch = search.Trim().ToLower();
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = tag.Trim().ToLower();
+            query = query.Where(a => a.Tags.Any(t => t.Name.ToLower() == normalizedTag));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -124,7 +131,27 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Tag>> GetTagsByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default)
+    {
+        var normalized = names
+            .Select(n => n.Trim().ToLower())
+            .Where(n => n.Length > 0)
+            .Distinct()
+            .ToList();
+
+        if (normalized.Count == 0)
+        {
+            return Array.Empty<Tag>();
+        }
+
+        return await _context.Set<Tag>()
+            .Where(t => normalized.Contains(t.Name.ToLower()))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)

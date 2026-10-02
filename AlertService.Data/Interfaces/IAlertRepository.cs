@@ -15,6 +15,7 @@ public interface IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = "createdDate",
         string sortDirection = "desc",
         int page = 1,
@@ -25,6 +26,8 @@ public interface IAlertRepository
         CancellationToken cancellationToken = default);
 
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Tag>> GetTagsByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default);
 
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
 

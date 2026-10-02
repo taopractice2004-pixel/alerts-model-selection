@@ -355,4 +355,132 @@ public class AlertRepositoryTests : IDisposable
 
         Assert.False(await _context.Alerts.AnyAsync());
     }
+
+    private static Alert NewAlertWithTags(string title, params string[] tagNames)
+    {
+        var alert = NewAlert(title);
+        foreach (var name in tagNames)
+        {
+            alert.Tags.Add(new Tag { Name = name });
+        }
+        return alert;
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_ReturnsOnlyAlertsWithThatTag()
+    {
+        await _repository.AddAsync(NewAlertWithTags("Networking issue", "network"));
+        await _repository.AddAsync(NewAlertWithTags("Disk issue", "disk"));
+        await _repository.AddAsync(NewAlert("No tags"));
+
+        var result = await _repository.GetAllAsync(tag: "network");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("Networking issue", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_IsCaseInsensitive()
+    {
+        await _repository.AddAsync(NewAlertWithTags("Networking issue", "Network"));
+
+        var result = await _repository.GetAllAsync(tag: "network");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("Networking issue", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilterAndExistingFilters_ReturnsOnlyAlertsMatchingAllCriteria()
+    {
+        await _repository.AddAsync(NewAlertWithTags("Match", "network"));
+        await _repository.AddAsync(NewAlertWithTags("Wrong tag", "disk"));
+        var inactive = NewAlertWithTags("Inactive with tag", "network");
+        inactive.IsActive = false;
+        await _repository.AddAsync(inactive);
+        var lowSeverity = NewAlertWithTags("Low severity with tag", "network");
+        lowSeverity.Severity = Severity.Low;
+        await _repository.AddAsync(lowSeverity);
+
+        var result = await _repository.GetAllAsync(isActive: true, severity: Severity.High, tag: "network");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Match", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_IncludesTags()
+    {
+        var added = await _repository.AddAsync(NewAlertWithTags("Tagged alert", "network", "disk"));
+        _context.ChangeTracker.Clear();
+
+        var result = await _repository.GetByIdAsync(added.Id);
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { "disk", "network" }, result!.Tags.Select(t => t.Name).OrderBy(n => n).ToArray());
+    }
+
+    [Fact]
+    public async Task GetTagsByNamesAsync_ReturnsMatchingTags_CaseInsensitive()
+    {
+        await _repository.AddAsync(NewAlertWithTags("Tagged alert", "network", "disk"));
+        _context.ChangeTracker.Clear();
+
+        var result = await _repository.GetTagsByNamesAsync(new[] { "NETWORK", "Disk" });
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(new[] { "disk", "network" }, result.Select(t => t.Name).OrderBy(n => n).ToArray());
+    }
+
+    [Fact]
+    public async Task GetTagsByNamesAsync_WhenNoMatches_ReturnsEmpty()
+    {
+        await _repository.AddAsync(NewAlertWithTags("Tagged alert", "network"));
+        _context.ChangeTracker.Clear();
+
+        var result = await _repository.GetTagsByNamesAsync(new[] { "nonexistent" });
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetTagsByNamesAsync_WhenNamesEmpty_ReturnsEmpty()
+    {
+        var result = await _repository.GetTagsByNamesAsync(Array.Empty<string>());
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task ManyToMany_PersistsTagsThroughJoinTable()
+    {
+        var added = await _repository.AddAsync(NewAlertWithTags("Tagged alert", "network"));
+        _context.ChangeTracker.Clear();
+
+        var reloaded = await _context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == added.Id);
+
+        Assert.Single(reloaded.Tags);
+        Assert.Equal("network", reloaded.Tags.First().Name);
+        Assert.Equal(1, await _context.Set<Tag>().CountAsync());
+    }
+
+    [Fact]
+    public async Task ManyToMany_ReusesSharedTagRow_AcrossAlerts()
+    {
+        await _repository.AddAsync(NewAlertWithTags("First alert", "shared"));
+        _context.ChangeTracker.Clear();
+
+        var existing = await _repository.GetTagsByNamesAsync(new[] { "shared" });
+        var secondAlert = NewAlert("Second alert");
+        secondAlert.Tags.Add(existing.Single());
+        await _repository.AddAsync(secondAlert);
+        _context.ChangeTracker.Clear();
+
+        Assert.Equal(1, await _context.Set<Tag>().CountAsync());
+        var reloaded = await _context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == secondAlert.Id);
+        Assert.Equal("shared", reloaded.Tags.Single().Name);
+    }
 }
