@@ -1,0 +1,59 @@
+{
+  "work_id": "{{STORY_ID | BUG_ID | TEST-<target>}}",
+  "work_type": "{{story | bug | testcase}}",
+  "related_work_id": "{{story ID this bug or test task belongs to, or empty}}",
+  "summary": "{{one-line summary}}",
+  "effort_mode": "{{low | deep}}",
+  "status": "{{ANALYSIS_DRAFT | ANALYSIS_APPROVED | IMPLEMENTATION_IN_PROGRESS | IMPLEMENTATION_COMPLETE | UNIT_TESTING_IN_PROGRESS | BUG_FOUND | BUG_FIX_IN_PROGRESS | BUG_FIXED | COMPLETE}}",
+  "waiting_for_human": "{{null, or the reason the current stage stopped for the developer}}",
+  "analyzed_at_commit": "{{Git revision (SHA) when /analyze-story wrote the plan, or null without Git}}",
+  "scope_anchors": [
+    "{{standalone bug or test tasks only: file | failing test | stack trace | endpoint | class | function}}"
+  ],
+  "files_changed": {
+    "production": ["{{path created or modified, recorded by /implement-story or /fix-bugs}}"],
+    "tests": ["{{path created or modified, recorded by /unit-testing or /fix-bugs}}"]
+  },
+  "selected_standards": [
+    "{{standard file or standard id}}"
+  ],
+  "commands": {
+    "build": [
+      { "working_directory": "{{path from repo root}}", "command": "{{command from manifest.json, with quiet option}}" }
+    ],
+    "type_check": [
+      { "working_directory": "{{path from repo root}}", "command": "{{command or NOT_CONFIGURED}}" }
+    ],
+    "lint": [
+      { "working_directory": "{{path from repo root}}", "command": "{{command or NOT_CONFIGURED}}" }
+    ],
+    "unit_test": [
+      { "working_directory": "{{path from repo root}}", "command": "{{narrow test command: one file, class, or filter}}" }
+    ],
+    "regression_test": [
+      { "working_directory": "{{path from repo root}}", "command": "{{related existing tests, or empty}}" }
+    ],
+    "integration_test": [
+      { "working_directory": "{{path from repo root}}", "command": "{{existing integration suite, or NOT_CONFIGURED}}" }
+    ],
+    "coverage": [
+      { "working_directory": "{{path from repo root}}", "command": "{{command scoped to changed files, or NOT_CONFIGURED}}" }
+    ]
+  },
+  "coverage_goal": "{{target for new or changed code, or NOT_CONFIGURED}}",
+  "defects": [
+    {
+      "id": "{{BUG_ID, or DEF-1, DEF-2 for defects found by /unit-testing}}",
+      "description": "{{short description}}",
+      "evidence": "{{failing test, build error, or stack trace location}}",
+      "expected": "{{expected behavior, or the AC it breaks}}",
+      "outcome": "{{OPEN | FIXED | NOT_FIXED | EXPECTED_BEHAVIOR | NEEDS_INFO | OUT_OF_SCOPE}}"
+    }
+  ],
+  "behaviors_to_cover": [
+    "{{standalone test tasks only: B1 - behavior to prove}}"
+  ],
+  "missing_facts": [
+    "{{fact missing from the plan or context, or empty}}"
+  ]
+}

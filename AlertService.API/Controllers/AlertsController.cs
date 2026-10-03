@@ -1,4 +1,5 @@
 using AlertService.API.Services;
+using System.ComponentModel.DataAnnotations;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,8 @@ namespace AlertService.API.Controllers;
 [Produces("application/json")]
 public class AlertsController : ControllerBase
 {
+    private const string DuplicateSuppressionHeaderName = "X-Duplicate-Suppressed";
+
     private readonly IAlertService _alertService;
 
     public AlertsController(IAlertService alertService)
@@ -46,14 +49,52 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>Gets daily alert volume trends by severity over the requested UTC day window.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(IReadOnlyList<AlertDailyTrendResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AlertDailyTrendResponse>>> GetTrends(
+        [FromQuery, Range(1, 90)] int days = 7,
+        CancellationToken cancellationToken = default)
+    {
+        var trends = await _alertService.GetDailyTrendsAsync(days, cancellationToken);
+        return Ok(trends);
+    }
+
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
-        var created = await _alertService.CreateAsync(request, cancellationToken);
-        return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
+        var createResult = await _alertService.CreateAsync(request, cancellationToken);
+        if (createResult.IsDuplicateSuppressed)
+        {
+            Response.Headers[DuplicateSuppressionHeaderName] = "true";
+            return Ok(createResult.Alert);
+        }
+
+        return CreatedAtRoute(nameof(GetById), new { id = createResult.Alert.Id }, createResult.Alert);
+    }
+
+    /// <summary>Adds one or more tags to an existing alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var updated = await _alertService.AddTagsAsync(id, request, cancellationToken);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (ArgumentException ex)
+        {
+            ModelState.AddModelError(nameof(request.Tags), ex.Message);
+            return ValidationProblem(ModelState);
+        }
     }
 
     /// <summary>Updates an existing alert.</summary>
@@ -75,6 +116,25 @@ public class AlertsController : ControllerBase
     {
         var deactivated = await _alertService.DeactivateAsync(id, cancellationToken);
         return deactivated is null ? NotFound() : Ok(deactivated);
+    }
+
+    /// <summary>Removes a single tag assignment from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, [FromRoute, StringLength(30, MinimumLength = 1)] string tag, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+            return removed ? NoContent() : NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            ModelState.AddModelError(nameof(tag), ex.Message);
+            return ValidationProblem(ModelState);
+        }
     }
 
     /// <summary>Deletes an alert.</summary>

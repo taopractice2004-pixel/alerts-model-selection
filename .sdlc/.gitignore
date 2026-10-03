@@ -1,0 +1,6 @@
+# Per-work-item pipeline files are personal working state; do not commit them.
+work/
+
+# To commit only the reviewed plans instead (for traceability), replace the line above with:
+# work/*/*
+# !work/*/plan.md

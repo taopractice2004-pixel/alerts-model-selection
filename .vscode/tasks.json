@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "ALERT-411 API unit tests",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"test",
+				"AlertService.API.Tests/AlertService.API.Tests.csproj",
+				"--filter",
+				"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests"
+			],
+			"isBackground": false
+		}
+	]
+}
