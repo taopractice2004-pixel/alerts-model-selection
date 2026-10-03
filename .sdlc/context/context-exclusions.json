@@ -1,0 +1,9 @@
+{
+  "generated_at": "",
+  "status": "setup-repo-context-not-yet-run",
+  "detected_technologies": [],
+  "excluded_paths": [],
+  "excluded_patterns": [],
+  "reason": "Generated, dependency, build, cache, binary or runtime-noise content that should normally not be used as Copilot context.",
+  "notes": "Starter shape. /setup-repo-context computes excluded_paths/excluded_patterns dynamically from the detected technologies, .gitignore, and actual repository structure. Never exclude normal source code, and never exclude config files (*.json, *.xml, *.yaml, *.yml, *.properties) solely by extension. /refresh-repo-context recalculates this file only when structure, technology, .gitignore, build configuration, or generated-output patterns materially change."
+}
