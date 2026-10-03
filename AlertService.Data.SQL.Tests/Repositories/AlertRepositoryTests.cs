@@ -43,6 +43,41 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task FindActiveDuplicateAsync_ReturnsNewestMatchingActiveAlertWithinWindow_CaseInsensitive()
+    {
+        var windowStartUtc = new DateTime(2026, 3, 1, 11, 45, 0, DateTimeKind.Utc);
+
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 3, 1, 11, 50, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("DISK FULL", Severity.High, new DateTime(2026, 3, 1, 11, 55, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Critical, new DateTime(2026, 3, 1, 11, 56, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 3, 1, 11, 57, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("Disk full warning", Severity.High, new DateTime(2026, 3, 1, 11, 58, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindActiveDuplicateAsync("disk full", Severity.High, windowStartUtc);
+
+        Assert.NotNull(result);
+        Assert.Equal("DISK FULL", result!.Title);
+        Assert.Equal(Severity.High, result.Severity);
+        Assert.True(result.IsActive);
+        Assert.Equal(new DateTime(2026, 3, 1, 11, 55, 0, DateTimeKind.Utc), result.CreatedDate);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenMatchesAreInactiveOutsideWindowDifferentSeverityOrNotExact_ReturnsNull()
+    {
+        var windowStartUtc = new DateTime(2026, 3, 1, 11, 45, 0, DateTimeKind.Utc);
+
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 3, 1, 11, 40, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 3, 1, 11, 55, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Critical, new DateTime(2026, 3, 1, 11, 56, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full warning", Severity.High, new DateTime(2026, 3, 1, 11, 57, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindActiveDuplicateAsync("DISK FULL", Severity.High, windowStartUtc);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public async Task GetAllAsync_ReturnsAlerts_NewestFirst()
     {
         await _repository.AddAsync(NewAlert("Older", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
@@ -266,6 +301,49 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetTrendCountsAsync_GroupsByUtcDayAndSeverityWithinWindow()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AlertDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new AlertDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new AlertRepository(context);
+
+        await repository.AddAsync(NewAlert("Before window", Severity.Low, new DateTime(2026, 8, 25, 23, 59, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("Day one low", Severity.Low, new DateTime(2026, 8, 26, 1, 0, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("Day one critical", Severity.Critical, new DateTime(2026, 8, 26, 23, 0, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("Day two medium", Severity.Medium, new DateTime(2026, 8, 27, 12, 30, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("Day two high", Severity.High, new DateTime(2026, 8, 27, 17, 45, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("At end boundary", Severity.High, new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await repository.GetTrendCountsAsync(
+            new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(2, result.Count);
+
+        Assert.Equal(new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc), result[0].Date);
+        Assert.Equal(2, result[0].TotalCount);
+        Assert.Equal(1, result[0].LowCount);
+        Assert.Equal(0, result[0].MediumCount);
+        Assert.Equal(0, result[0].HighCount);
+        Assert.Equal(1, result[0].CriticalCount);
+
+        Assert.Equal(new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc), result[1].Date);
+        Assert.Equal(2, result[1].TotalCount);
+        Assert.Equal(0, result[1].LowCount);
+        Assert.Equal(1, result[1].MediumCount);
+        Assert.Equal(1, result[1].HighCount);
+        Assert.Equal(0, result[1].CriticalCount);
+    }
+
+    [Fact]
     public async Task GetAllAsync_WhenPageIsPastLastPage_ReturnsEmptyItemsWithTotalCount()
     {
         await _repository.AddAsync(NewAlert("First", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
@@ -275,6 +353,65 @@ public class AlertRepositoryTests : IDisposable
 
         Assert.Equal(2, result.TotalCount);
         Assert.Empty(result.Items);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_PersistsAndReloadsTags()
+    {
+        var added = await _repository.AddAsync(NewAlert("Tagged alert"));
+        var alert = await _repository.GetByIdAsync(added.Id);
+
+        var updated = await _repository.AddTagsAsync(alert!, new[] { "Ops", " db ", "ops" });
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(added.Id);
+
+        Assert.Equal(new[] { "db", "Ops" }, updated.Tags.Select(t => t.Name).OrderBy(name => name));
+        Assert.Equal(new[] { "db", "Ops" }, reloaded!.Tags.Select(t => t.Name).OrderBy(name => name));
+        Assert.Equal(2, await _context.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTag_ComposesWithExistingFilters_CaseInsensitive()
+    {
+        var taggedMatch = await _repository.AddAsync(NewAlert("Disk primary", Severity.Critical, new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var taggedWrongSearch = await _repository.AddAsync(NewAlert("CPU primary", Severity.Critical, new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var taggedInactive = await _repository.AddAsync(NewAlert("Disk inactive", Severity.Critical, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), isActive: false));
+        var untagged = await _repository.AddAsync(NewAlert("Disk untagged", Severity.Critical, new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        await _repository.AddTagsAsync((await _repository.GetByIdAsync(taggedMatch.Id))!, new[] { "Ops" });
+        await _repository.AddTagsAsync((await _repository.GetByIdAsync(taggedWrongSearch.Id))!, new[] { "Ops" });
+        await _repository.AddTagsAsync((await _repository.GetByIdAsync(taggedInactive.Id))!, new[] { "Ops" });
+        await _repository.AddTagsAsync((await _repository.GetByIdAsync(untagged.Id))!, new[] { "Db" });
+
+        var result = await _repository.GetAllAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            createdFrom: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            createdTo: new DateTime(2026, 3, 31, 23, 59, 59, DateTimeKind.Utc),
+            search: "disk",
+            tag: " ops ");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Disk primary", result.Items[0].Title);
+        Assert.Equal(new[] { "Ops" }, result.Items[0].Tags.Select(t => t.Name));
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_RemovesAssignedTag()
+    {
+        var added = await _repository.AddAsync(NewAlert("Tagged alert"));
+        var alert = await _repository.GetByIdAsync(added.Id);
+        await _repository.AddTagsAsync(alert!, new[] { "Ops", "Db" });
+
+        var reloaded = await _repository.GetByIdAsync(added.Id);
+        await _repository.RemoveTagAsync(reloaded!, "ops");
+
+        _context.ChangeTracker.Clear();
+        var afterRemoval = await _repository.GetByIdAsync(added.Id);
+
+        Assert.Equal(new[] { "Db" }, afterRemoval!.Tags.Select(t => t.Name));
     }
 
     [Fact]
