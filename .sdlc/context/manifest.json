@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 4,
+  "status": "BUILT",
+  "repositoryMode": "EXISTING",
+  "contextMaturity": "ESTABLISHED",
+  "requirementSource": {
+    "path": null,
+    "readAtUtc": null,
+    "summary": "project-profile.md section 15"
+  },
+  "establishment": {
+    "implementationPatterns": "ESTABLISHED",
+    "testPatterns": "ESTABLISHED"
+  },
+  "builtAtUtc": "2026-10-03T00:00:00Z",
+  "builtAtCommit": "83033e09d24268b1cc56cfaead3d95e9f365c3ba",
+  "refreshedAtUtc": null,
+  "refreshedAtCommit": null,
+  "commands": {
+    "restore": {
+      "working_directory": ".",
+      "command": "dotnet tool restore; dotnet restore AlertService.sln",
+      "status": "NOT_RUN (unverified)"
+    },
+    "build": {
+      "working_directory": ".",
+      "command": "dotnet build AlertService.sln -c Debug",
+      "narrow_example": "dotnet build AlertService.API/AlertService.API.csproj -c Debug",
+      "status": "NOT_RUN (unverified)"
+    },
+    "type_check": {
+      "working_directory": ".",
+      "command": "NOT_CONFIGURED",
+      "status": "NOT_CONFIGURED"
+    },
+    "lint": {
+      "working_directory": ".",
+      "command": "NOT_CONFIGURED",
+      "status": "NOT_CONFIGURED"
+    },
+    "unit_test": {
+      "working_directory": ".",
+      "command": "dotnet test AlertService.sln",
+      "narrow_example": "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertManagementServiceTests\"",
+      "status": "NOT_RUN (unverified)"
+    },
+    "integration_test": {
+      "working_directory": ".",
+      "command": "NOT_CONFIGURED",
+      "status": "NOT_CONFIGURED"
+    },
+    "coverage": {
+      "working_directory": ".",
+      "command": "dotnet test AlertService.sln --collect:\"XPlat Code Coverage\"",
+      "narrow_example": "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --collect:\"XPlat Code Coverage\"",
+      "status": "NOT_RUN (unverified)"
+    }
+  },
+  "contextPolicy": {
+    "_note": "Repository-specific, classified by purpose during /setup-repo-context. Paths are globs relative to the repository root.",
+    "normalPaths": [
+      {
+        "path": "AlertService.API/**",
+        "reason": "HTTP layer, business services, mapping, middleware, composition root"
+      },
+      {
+        "path": "AlertService.Common/**",
+        "reason": "Shared enums and constants"
+      },
+      {
+        "path": "AlertService.DTO/**",
+        "reason": "Request/response contracts with validation"
+      },
+      {
+        "path": "AlertService.Models/**",
+        "reason": "Domain entity"
+      },
+      {
+        "path": "AlertService.Data/**",
+        "reason": "Data-access abstractions (interfaces)"
+      },
+      {
+        "path": "AlertService.Data.SQL/**",
+        "reason": "EF Core DbContext, configuration, repository, DI extensions"
+      },
+      {
+        "path": "AlertService.API.Tests/**",
+        "reason": "Controller and service unit tests"
+      },
+      {
+        "path": "AlertService.Data.SQL.Tests/**",
+        "reason": "Repository unit tests"
+      }
+    ],
+    "readWhenRelevant": [
+      {
+        "path": "**/*.csproj",
+        "reason": "Project references and package versions"
+      },
+      {
+        "path": "Directory.Build.props",
+        "reason": "Shared build settings (target framework, nullable)"
+      },
+      {
+        "path": "dotnet-tools.json",
+        "reason": "Local tool manifest (dotnet-ef)"
+      },
+      {
+        "path": "AlertService.API/appsettings*.json",
+        "reason": "Connection string, migration flag, Serilog config"
+      },
+      {
+        "path": "AlertService.API/Properties/launchSettings.json",
+        "reason": "Launch profiles and local ports"
+      },
+      {
+        "path": "database/**",
+        "reason": "Hand-runnable SQL scripts; coordinate schema changes"
+      },
+      {
+        "path": "README.md",
+        "reason": "Project overview, endpoints, run/test/migration commands"
+      }
+    ],
+    "skipByDefault": [
+      {
+        "path": "standards/",
+        "reason": "Company standards; condensed into standards-summary.md. Read only by setup and refresh."
+      },
+      {
+        "path": ".github/skills/",
+        "reason": "Pipeline files; opened by exact path only"
+      },
+      {
+        "path": ".sdlc/templates/",
+        "reason": "Pipeline templates; opened by exact path only"
+      },
+      {
+        "path": ".sdlc/work/",
+        "reason": "Per-story pipeline state; opened by exact path only"
+      },
+      {
+        "path": "**/bin/",
+        "reason": "Build output"
+      },
+      {
+        "path": "**/obj/",
+        "reason": "Build intermediates"
+      },
+      {
+        "path": "AlertService.API/Logs/",
+        "reason": "Runtime log files"
+      }
+    ],
+    "doNotModify": [
+      {
+        "path": "standards/",
+        "reason": "Company standards documents"
+      },
+      {
+        "path": "AlertService.Data.SQL/Migrations/",
+        "reason": "EF Core-generated migrations; change only via dotnet-ef with approval"
+      },
+      {
+        "path": "database/",
+        "reason": "Generated/DBA-owned SQL scripts; schema changes need approval"
+      }
+    ]
+  },
+  "sections": {
+    "project-profile.md#1-4 Overview, Stack, Structure, Architecture": {
+      "sources": [
+        "README.md",
+        "Directory.Build.props",
+        "AlertService.sln",
+        "AlertService.API/Program.cs",
+        "AlertService.API/AlertService.API.csproj"
+      ]
+    },
+    "project-profile.md#5 Modules": {
+      "sources": [
+        "AlertService.sln",
+        "*/*.csproj"
+      ]
+    },
+    "project-profile.md#6 Pattern Examples": {
+      "sources": [
+        "AlertService.API/Controllers/AlertsController.cs",
+        "AlertService.API/Services/AlertManagementService.cs",
+        "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+        "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+        "AlertService.DTO/Requests/AlertQueryRequest.cs",
+        "AlertService.API.Tests/Services/AlertManagementServiceTests.cs"
+      ]
+    },
+    "project-profile.md#7 Testing Context": {
+      "sources": [
+        "AlertService.API.Tests/AlertService.API.Tests.csproj",
+        "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+        "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+      ]
+    },
+    "project-profile.md#8 Configuration": {
+      "sources": [
+        "AlertService.API/appsettings.json",
+        "AlertService.API/appsettings.Development.json",
+        "Directory.Build.props",
+        "dotnet-tools.json"
+      ]
+    },
+    "contextPolicy and project-profile.md#9 Context Policy": {
+      "sources": [
+        "AlertService.sln",
+        ".gitignore",
+        "README.md"
+      ]
+    },
+    "project-profile.md#14 Key Documents": {
+      "sources": [
+        "README.md",
+        "database/",
+        "standards/"
+      ]
+    },
+    "standards-summary.md": {
+      "sources": [
+        "standards/",
+        "AlertService.API/",
+        "AlertService.Data.SQL/",
+        "AlertService.DTO/",
+        "AlertService.API.Tests/"
+      ]
+    },
+    "manifest.json#commands": {
+      "sources": [
+        "README.md",
+        "AlertService.sln",
+        "dotnet-tools.json"
+      ]
+    },
+    ".github/instructions applyTo paths": {
+      "sources": [
+        "AlertService.sln",
+        "*/*.csproj"
+      ]
+    },
+    ".github/copilot-instructions.md#Project": {
+      "sources": [
+        "README.md",
+        "Directory.Build.props"
+      ]
+    },
+    "project-profile.md#15-16 Requirements Summary, Open Decisions": {
+      "sources": [
+        "requirement document (GREENFIELD only)"
+      ]
+    }
+  }
+}

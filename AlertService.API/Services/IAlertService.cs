@@ -14,7 +14,11 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    /// <summary>Returns daily alert-creation counts by severity for the last <c>request.Days</c> UTC days, oldest first.</summary>
+    Task<AlertTrendsResponse> GetTrendsAsync(AlertTrendsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Creates an alert, or suppresses the create when an active duplicate exists within the window.</summary>
+    Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);
@@ -24,4 +28,41 @@ public interface IAlertService
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds one or more tags to an existing alert (deduped case-insensitively).</summary>
+    Task<AddTagsResult> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> if the tag assignment was removed, <c>false</c> if the alert or assignment was not found.</returns>
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Outcome of <see cref="IAlertService.AddTagsAsync"/>.</summary>
+public enum AddTagsOutcome
+{
+    Success,
+    AlertNotFound,
+    TagLimitExceeded
+}
+
+/// <summary>
+/// Result of an add-tags operation so the controller can map to 200/400/404 without exceptions.
+/// </summary>
+public sealed record AddTagsResult(AddTagsOutcome Outcome, AlertResponse? Alert)
+{
+    public static AddTagsResult Success(AlertResponse alert) => new(AddTagsOutcome.Success, alert);
+
+    public static AddTagsResult AlertNotFound() => new(AddTagsOutcome.AlertNotFound, null);
+
+    public static AddTagsResult TagLimitExceeded() => new(AddTagsOutcome.TagLimitExceeded, null);
+}
+
+/// <summary>
+/// Result of a create operation so the controller can return 201 for a new alert or 200 with the
+/// duplicate-suppressed header when an active duplicate was found within the window.
+/// </summary>
+public sealed record CreateAlertResult(bool Suppressed, AlertResponse Alert)
+{
+    public static CreateAlertResult Created(AlertResponse alert) => new(false, alert);
+
+    public static CreateAlertResult SuppressedDuplicate(AlertResponse alert) => new(true, alert);
 }

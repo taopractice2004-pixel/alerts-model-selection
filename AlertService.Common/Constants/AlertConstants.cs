@@ -16,4 +16,12 @@ public static class AlertConstants
     public const string NonWhitespacePattern = @"^[\s\S]*\S[\s\S]*$";
     public const int TitleMaxLength = 200;
     public const int DescriptionMaxLength = 1000;
+    public const int TagMinLength = 1;
+    public const int TagMaxLength = 30;
+    public const int MaxTagsPerAlert = 10;
+    public const string DuplicateSuppressedHeader = "X-Duplicate-Suppressed";
+    public const int DefaultSuppressionWindowMinutes = 15;
+    public const int DefaultTrendDays = 7;
+    public const int MinTrendDays = 1;
+    public const int MaxTrendDays = 90;
 }
