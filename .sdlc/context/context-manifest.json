@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "stage": "setup-repo-context-not-yet-run",
+  "generatedAtUtc": null,
+  "repositoryMode": "TO_BE_DISCOVERED",
+  "contextFiles": [
+    "repo-profile.md",
+    "repository-map.md",
+    "project-docs-index.md",
+    "standards-summary.md",
+    "standards-index.json",
+    "context-exclusions.json",
+    "context-manifest.json"
+  ],
+  "detected": {
+    "primaryEntry": "TO_BE_DISCOVERED",
+    "language": "TO_BE_DISCOVERED",
+    "platformOrRuntime": "TO_BE_DISCOVERED",
+    "applicationType": "TO_BE_DISCOVERED",
+    "dataStore": "TO_BE_DISCOVERED",
+    "testFrameworks": [],
+    "buildCommand": "TO_BE_DISCOVERED",
+    "testCommand": "TO_BE_DISCOVERED",
+    "runCommand": "TO_BE_DISCOVERED"
+  },
+  "sourceInputs": {
+    "rootDocs": [],
+    "buildFiles": [],
+    "standards": [],
+    "sampleSource": []
+  },
+  "notes": "Starter manifest for the current compact pipeline. After copying this package into a real repository, run /setup-repo-context before /analyze-story, /fix-bugs, or /unit-testing. Run /refresh-repo-context later only when repository context changes materially."
+}
