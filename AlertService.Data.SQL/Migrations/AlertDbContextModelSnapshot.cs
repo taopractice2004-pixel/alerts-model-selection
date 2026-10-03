@@ -56,6 +56,57 @@ namespace AlertService.Data.SQL.Migrations
 
                     b.ToTable("Alerts", (string)null);
                 });
+
+            modelBuilder.Entity("AlertService.Models.Tag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertTag", b =>
+                {
+                    b.Property<int>("AlertsId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagsId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AlertsId", "TagsId");
+
+                    b.HasIndex("TagsId");
+
+                    b.ToTable("AlertTags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertTag", b =>
+                {
+                    b.HasOne("AlertService.Models.Alert", null)
+                        .WithMany()
+                        .HasForeignKey("AlertsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AlertService.Models.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
 #pragma warning restore 612, 618
         }
     }

@@ -25,6 +25,7 @@ public class AlertRepository : IAlertRepository
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
+        string? tag = null,
         CancellationToken cancellationToken = default)
     {
         IQueryable<Alert> query = _context.Alerts.AsNoTracking();
@@ -55,10 +56,17 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
         }
 
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = Tag.NormalizeName(tag);
+            query = query.Where(a => a.Tags.Any(t => t.Name == normalizedTag));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
+            .Include(a => a.Tags)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -87,6 +95,21 @@ public class AlertRepository : IAlertRepository
         return summary is null
             ? (0, 0, 0, 0, 0, 0, 0)
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
+    }
+
+    public async Task<IReadOnlyList<(DateTime Date, Severity Severity, int Count)>> GetDailyCountsAsync(
+        DateTime fromUtc,
+        DateTime toExclusiveUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = await _context.Alerts
+            .AsNoTracking()
+            .Where(a => a.CreatedDate >= fromUtc && a.CreatedDate < toExclusiveUtc)
+            .GroupBy(a => new { Date = a.CreatedDate.Date, a.Severity })
+            .Select(g => new { g.Key.Date, g.Key.Severity, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return groups.Select(g => (g.Date, g.Severity, g.Count)).ToList();
     }
 
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
@@ -124,7 +147,35 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts.Include(a => a.Tags).FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public Task<Alert?> FindRecentActiveDuplicateAsync(
+        string title,
+        Severity severity,
+        DateTime createdSinceUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLower();
+
+        return _context.Alerts
+            .AsNoTracking()
+            .Include(a => a.Tags)
+            .Where(a => a.IsActive
+                && a.Severity == severity
+                && a.CreatedDate >= createdSinceUtc
+                && a.Title.ToLower() == normalizedTitle)
+            .OrderByDescending(a => a.CreatedDate)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Tag>> GetTagsByNamesAsync(
+        IReadOnlyCollection<string> normalizedNames,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Tags
+            .Where(t => normalizedNames.Contains(t.Name))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)

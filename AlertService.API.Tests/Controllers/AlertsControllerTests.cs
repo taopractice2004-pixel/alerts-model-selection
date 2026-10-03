@@ -1,10 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using AlertService.API.Controllers;
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moq;
 
 namespace AlertService.API.Tests.Controllers;
@@ -16,7 +20,10 @@ public class AlertsControllerTests
 
     public AlertsControllerTests()
     {
-        _controller = new AlertsController(_service.Object);
+        _controller = new AlertsController(_service.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     private static PagedResponse<AlertResponse> SamplePagedResponse(params AlertResponse[] items) => new()
@@ -209,10 +216,43 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOk_WithServiceBuckets()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 2 };
+        IReadOnlyList<AlertTrendBucketResponse> buckets =
+        [
+            new() { Date = new DateOnly(2026, 8, 31), TotalCount = 0, SeverityCounts = new AlertSeverityCountsResponse() },
+            new() { Date = new DateOnly(2026, 9, 1), TotalCount = 3, SeverityCounts = new AlertSeverityCountsResponse { High = 3 } }
+        ];
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(buckets);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsAssignableFrom<IReadOnlyList<AlertTrendBucketResponse>>(ok.Value);
+        Assert.Equal(2, body.Count);
+        Assert.Equal(new DateOnly(2026, 9, 1), body[1].Date);
+        Assert.Equal(3, body[1].SeverityCounts.High);
+        _service.Verify(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTrends_PassesCancellationTokenToService()
+    {
+        using var cts = new CancellationTokenSource();
+        var request = new AlertTrendsQueryRequest();
+        _service.Setup(s => s.GetTrendsAsync(request, cts.Token)).ReturnsAsync(new List<AlertTrendBucketResponse>());
+
+        await _controller.GetTrends(request, cts.Token);
+
+        _service.Verify(s => s.GetTrendsAsync(request, cts.Token), Times.Once);
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(5), false));
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -220,6 +260,20 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+        Assert.False(_controller.Response.Headers.ContainsKey(AlertConstants.DuplicateSuppressedHeader));
+    }
+
+    [Fact]
+    public async Task Create_WhenDuplicateSuppressed_ReturnsOk_WithHeader()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(3), true));
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(3, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal("true", _controller.Response.Headers[AlertConstants.DuplicateSuppressedHeader].ToString());
     }
 
     [Fact]
@@ -280,6 +334,82 @@ public class AlertsControllerTests
         _service.Setup(s => s.DeleteAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await _controller.Delete(99, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAdded_ReturnsOkWithUpdatedAlert()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "urgent", "network" } };
+        var updated = SampleResponse();
+        updated.Tags = new[] { "network", "urgent" };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddAlertTagsResult(AddAlertTagsStatus.Added, updated));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "network", "urgent" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "urgent" } };
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddAlertTagsResult(AddAlertTagsStatus.AlertNotFound, null));
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenLimitExceeded_ReturnsBadRequestWithTagsError()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "urgent" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddAlertTagsResult(AddAlertTagsStatus.TagLimitExceeded, null));
+        var problemFactory = new Mock<ProblemDetailsFactory>();
+        problemFactory.Setup(f => f.CreateValidationProblemDetails(
+                It.IsAny<HttpContext>(),
+                It.IsAny<ModelStateDictionary>(),
+                It.IsAny<int?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>()))
+            .Returns((HttpContext? _, ModelStateDictionary modelState, int? status, string? _, string? _, string? _, string? _) =>
+                new ValidationProblemDetails(modelState) { Status = status ?? StatusCodes.Status400BadRequest });
+        _controller.ProblemDetailsFactory = problemFactory.Object;
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
+        var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.True(problem.Errors.ContainsKey(nameof(AddAlertTagsRequest.Tags)));
+        Assert.True(_controller.ModelState.ContainsKey(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "urgent", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "urgent", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAlertOrTagMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "missing", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(1, "missing", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }

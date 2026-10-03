@@ -36,6 +36,8 @@ try
     builder.Services.AddSqlDataAccess(builder.Configuration);   // DbContext + repositories
     builder.Services.AddAlertHealthChecks();
     builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.Configure<DuplicateSuppressionOptions>(
+        builder.Configuration.GetSection(DuplicateSuppressionOptions.SectionName));
     builder.Services.AddScoped<IAlertService, AlertManagementService>();
 
     var app = builder.Build();

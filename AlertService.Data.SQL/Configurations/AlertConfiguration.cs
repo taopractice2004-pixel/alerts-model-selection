@@ -38,5 +38,9 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .IsRequired();
 
         builder.HasIndex(a => a.IsActive);
+
+        builder.HasMany(a => a.Tags)
+            .WithMany(t => t.Alerts)
+            .UsingEntity(j => j.ToTable("AlertTags"));
     }
 }

@@ -50,6 +50,8 @@ only to register it in DI (`services.AddSqlDataAccess(configuration)`).
 | PUT    | `/api/alerts/{id}`  | 200              | 400, 404    |
 | PATCH  | `/api/alerts/{id}/deactivate` | 200      | 404         |
 | DELETE | `/api/alerts/{id}`  | 204              | 404         |
+| POST   | `/api/alerts/{id}/tags` | 200 + updated alert | 400, 404 |
+| DELETE | `/api/alerts/{id}/tags/{tag}` | 204        | 404         |
 
 `severity` is sent and returned as a string: `Low`, `Medium`, `High` or `Critical`.
 
@@ -61,6 +63,7 @@ only to register it in DI (`services.AddSqlDataAccess(configuration)`).
 - `sortBy=createdDate|severity|title` (default `createdDate`)
 - `sortDirection=asc|desc` (default `desc`)
 - `search=<title fragment>` (case-insensitive, max `200` chars)
+- `tag=<name>` (case-insensitive exact match, max `30` chars; combines with the other filters)
 
 This endpoint now returns a paged response wrapper. That is a breaking response-contract change from the previous raw array response.
 
@@ -69,6 +72,8 @@ Examples:
 - `GET /api/alerts?severity=Critical&isActive=true&page=2&pageSize=10&sortBy=title&sortDirection=asc&search=disk`
 - `GET /api/alerts/summary`
 - `PATCH /api/alerts/1/deactivate`
+- `GET /api/alerts?tag=network&isActive=true`
+- `DELETE /api/alerts/1/tags/network`
 
 ```json
 GET /api/alerts?page=1&pageSize=2&sortBy=createdDate&sortDirection=desc&search=disk
@@ -80,7 +85,8 @@ GET /api/alerts?page=1&pageSize=2&sortBy=createdDate&sortDirection=desc&search=d
       "description": "85% used",
       "severity": "High",
       "createdDate": "2026-09-01T00:00:00Z",
-      "isActive": true
+      "isActive": true,
+      "tags": ["disk", "storage"]
     }
   ],
   "page": 1,
@@ -108,6 +114,15 @@ GET /api/alerts/summary
 ```json
 POST /api/alerts
 { "title": "CPU usage high", "description": "CPU above 90%", "severity": "High", "isActive": true }
+```
+
+Every endpoint that returns an alert includes its `tags` (sorted, lower-case, empty when none).
+Tags are trimmed and stored lower-case; an alert can have at most `10` tags, each `1..30` characters.
+Adding a tag the alert already has is ignored; exceeding the limit or sending an invalid tag returns `400`.
+
+```json
+POST /api/alerts/1/tags
+{ "tags": ["Network", "prod"] }
 ```
 
 ## Health checks
