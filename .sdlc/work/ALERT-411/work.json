@@ -1,0 +1,101 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add duplicate alert suppression window for POST /api/alerts by reusing a recent active alert with matching title and severity.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "On POST /api/alerts, if an active alert with the same Title (case-insensitive) and Severity was created within the configured suppression window, do not create a new row and instead return the existing alert payload."
+    },
+    {
+      "id": "AC2",
+      "text": "When a duplicate is suppressed, the API returns 200 OK and includes response header X-Duplicate-Suppressed: true."
+    },
+    {
+      "id": "AC3",
+      "text": "When no duplicate is found, POST /api/alerts continues to create a new alert and returns 201 Created."
+    },
+    {
+      "id": "AC4",
+      "text": "Suppression window minutes are configurable via appsettings.json and are not hardcoded."
+    },
+    {
+      "id": "AC5",
+      "text": "Suppression does not apply across different severities and does not apply when prior matching alerts are inactive."
+    }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts",
+    "AlertService.API/Controllers/AlertsController.cs::Create",
+    "AlertService.API/Services/IAlertService.cs::CreateAsync",
+    "AlertService.API/Services/AlertManagementService.cs::CreateAsync",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertCreateResult.cs",
+    "AlertService.API/Services/AlertSuppressionOptions.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO/Requests/CreateAlertRequest.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Common/Enums/Severity.cs",
+    "AlertService.API/Program.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "No duplicate row creation when suppression condition is met.",
+    "Duplicate matching is case-insensitive on Title and exact on Severity.",
+    "Only active alerts are candidates for suppression.",
+    "Suppression applies only within configured minute window.",
+    "Controller response contract must distinguish suppressed (200 + header) vs created (201).",
+    "Do not change behavior of unrelated endpoints."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "coverage_goals": [
+    "Behavior coverage for AC1-AC5 across controller status/header behavior, service suppression branching, and repository duplicate candidate lookup semantics."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

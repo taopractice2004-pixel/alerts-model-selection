@@ -30,6 +30,10 @@ public class AlertQueryRequest : IValidatableObject
     [StringLength(AlertConstants.SearchMaxLength)]
     public string? Search { get; set; }
 
+    [StringLength(AlertConstants.TagMaxLength, MinimumLength = 1)]
+    [RegularExpression(AlertConstants.NonWhitespacePattern)]
+    public string? Tag { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CreatedFrom.HasValue && CreatedTo.HasValue && CreatedFrom.Value > CreatedTo.Value)

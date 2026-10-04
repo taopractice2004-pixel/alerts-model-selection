@@ -1,0 +1,93 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "work_case": "SIMPLE",
+  "relationship_mode": "empty",
+  "tracker": "",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends?days=N to return UTC daily alert-creation trend buckets with per-severity counts.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "GET /api/alerts/trends supports days query with default 7, min 1, max 90, and returns exactly N UTC calendar-day buckets for the last N days ordered oldest first."
+    },
+    {
+      "id": "AC2",
+      "text": "Each day bucket includes total alert count and counts for every severity, including explicit zeros for no-alert days and severities."
+    },
+    {
+      "id": "AC3",
+      "text": "Trend severity representation follows existing summary endpoint severity ordering convention (Low, Medium, High, Critical)."
+    },
+    {
+      "id": "AC4",
+      "text": "Invalid days values (out of range or non-numeric) return 400 with ValidationProblemDetails consistent with existing query validation behavior."
+    }
+  ],
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs::GetSummary",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs::GetSummaryAsync",
+    "AlertService.Data/Interfaces/IAlertRepository.cs::GetSummaryAsync",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs::GetSummaryAsync"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Responses/AlertDailyTrendResponse.cs (new)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Common/Enums/Severity.cs",
+    "AlertService.DTO/Responses/AlertSummaryResponse.cs",
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Do not change existing summary endpoint contract while adding trends endpoint.",
+    "Use UTC calendar-day boundaries for bucket grouping and day generation.",
+    "Return zero-count buckets for missing days and missing severities.",
+    "Use ApiController/query-validation behavior to preserve ValidationProblemDetails shape for invalid days."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --collect:\"XPlat Code Coverage\" --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --collect:\"XPlat Code Coverage\" --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage for day-bucket generation, zero-fill, and severity ordering mapping.",
+    "Behavior coverage for query validation paths (default, out-of-range, non-numeric days).",
+    "Repository query coverage for UTC day grouping and counts across empty and mixed datasets."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

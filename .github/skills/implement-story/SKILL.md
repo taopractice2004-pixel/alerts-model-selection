@@ -1,6 +1,6 @@
 ---
 name: implement-story
-description: "Primary SDLC stage. Implement an already-analyzed story from its compact story cache using the smallest required context. Reads implementation-cache.json first, then only the exact files it names, runs the narrowest validation, and updates changes.md and session.md. Runs as an isolated forked skill. Use after /analyze-story has produced the story cache."
+description: "Primary SDLC stage. Implement an already-analyzed story exactly as the story and finalized plan ask, using the smallest required context. Reads work.json first, then only the exact files it names, changes source code only, runs only the tech-stack build/compile check (no unit tests are written or run here), and appends to log.md. Runs as an isolated forked skill. Use after /analyze-story; always followed by /unit-testing."
 argument-hint: "<STORY-ID>"
 user-invocable: true
 disable-model-invocation: true
@@ -13,7 +13,10 @@ Complete authoritative procedure for the `/implement-story` SDLC stage. Develope
 skill directly; there is no prompt wrapper or custom agent.
 
 ## Purpose
-Implement the approved story using the smallest required context.
+Implement the approved story — exactly what the story and the finalized `plan.md` /
+`work.json` ask for — using the smallest required context. This stage does **not** test the
+story: writing unit tests, running them, and verifying the acceptance criteria all happen in the
+next stage, `/unit-testing`.
 
 ## Execution Context
 - `context: fork` — this skill runs as an isolated subagent in its own context window. The
@@ -21,16 +24,19 @@ Implement the approved story using the smallest required context.
 - This SKILL.md is the complete role and procedure. Do not create, delegate to, or invoke any
   custom agent or other skill from inside this stage.
 - Do not rely on prior conversation context (including the `/analyze-story` run). Cross-stage
-  state comes only from persistent `.sdlc/` artifacts, with `implementation-cache.json` as the
-  authoritative scope.
+  state comes only from persistent `.sdlc/` artifacts, with `work.json` as the authoritative
+  scope.
 - Write every required `.sdlc` artifact before returning; nothing else survives the fork.
 - Return only the concise outcome block from the Stop Condition, then STOP for human review.
 
 ## Role
 Developer: implement the exact approved/cached scope with minimal rereading, match existing
-architecture, naming, and patterns, and run the narrowest validation for the touched slice.
+architecture, naming, and patterns, and confirm the touched slice builds.
 - Keep changes within the cached story scope; no unrelated refactoring.
-- Permitted capabilities: `read`, `search`, `edit`, and `execute` (narrowest validation only).
+- Production source changes only. Do **not** create, edit, or delete unit-test files, and do
+  **not** run unit tests, test suites, coverage, or manual acceptance checks in this stage.
+- Permitted capabilities: `read`, `search`, `edit` (production source and `.sdlc` artifacts),
+  and `execute` (the build/compile/type-check command for the repository's tech stack only).
 - Do not reread external trackers, full standards documents, BRDs, or broad repository
   documentation when the cache is sufficient, and do not rescan beyond the touched slice unless
   the cache is wrong.
@@ -40,50 +46,51 @@ Story ID. If the only in-progress story is not inferable, ask for the Story ID.
 
 ## Prerequisites
 The story cache must exist:
-- `.sdlc/work/<STORY-ID>/session.md`
-- `.sdlc/work/<STORY-ID>/story-context.md`
-- `.sdlc/work/<STORY-ID>/implementation-plan.md`
-- `.sdlc/work/<STORY-ID>/impact-map.md`
-- `.sdlc/work/<STORY-ID>/implementation-cache.json`
+- `.sdlc/work/<STORY-ID>/work.json`
+- `.sdlc/work/<STORY-ID>/plan.md`
+- `.sdlc/work/<STORY-ID>/log.md`
 
 If these files are missing, STOP and recommend `/analyze-story`.
 
 ## Shared Rules
-Follow `.sdlc/framework/context-rules.md`, `.sdlc/framework/stage-rules.md`, the applicable
-`.github/instructions/*.instructions.md`, and the global rules in
-`.github/copilot-instructions.md`. Do not duplicate those rules here.
+Follow the shared pipeline rules in `.github/copilot-instructions.md` (Read Order, Context
+Rules, Stage Outputs, Repository Modes, exclusions) and the applicable `.github/instructions/*.instructions.md`.
+Do not duplicate those rules here.
 
 ## Procedure
 1. Read, in this order:
-   - `implementation-cache.json`
-   - `session.md`
-   - exact source files and tests listed in `implementation-cache.json`
-2. Read `implementation-plan.md` only if implementation intent or validation rationale is
-   missing from `implementation-cache.json`.
-3. Read `story-context.md` only if business constraints, work relationship, or tracker context
-   is missing from `implementation-cache.json`.
-4. Read `impact-map.md` only if adjacent dependencies or out-of-scope boundaries are missing
-   from `implementation-cache.json`.
-5. Read `requirement-analysis.md` only if the story case is `AMBIGUOUS`, unresolved questions
-   remain, or the cache is incomplete.
-6. Read `.sdlc/context/repo-profile.md` or `.sdlc/context/standards-summary.md` only if
+   - `work.json`
+   - `log.md`
+   - exact source files and tests listed in `work.json`
+2. Read `plan.md` only if implementation intent, validation rationale, out-of-scope boundaries,
+   or requirement-analysis risks are missing from `work.json` (always for an `AMBIGUOUS` case
+   or when unresolved questions remain).
+3. Read `.sdlc/context/project-profile.md` or `.sdlc/context/standards-summary.md` only if
    `repo_context_fallback_needed` is true or the cache explicitly records a missing fact.
    For standards, rely on the compact `.github/instructions/standards/*.instructions.md` files
    that auto-apply to the touched files and on the `selected_standards` ids in the cache; read a
    full `standards/*.md` file only when an exact rule or missing detail is required. Never
    reread the entire `standards/` folder.
-7. If an exact file is missing from the cache but the slice is otherwise clear, patch only the
+4. If an exact file is missing from the cache but the slice is otherwise clear, patch only the
    missing cache field from the smallest nearby read, then continue.
-8. Do not broad-scan the repository when the cache already identifies exact files or anchors.
-9. Implement the change directly in this forked context, using only the minimal story cache,
+5. Do not broad-scan the repository when the cache already identifies exact files or anchors.
+6. Implement the change directly in this forked context, using only the minimal story cache,
    the relevant instructions, and the exact touched files.
-10. Run the narrowest validation commands recorded in `implementation-cache.json`. Do not run a
-    full repository build or test suite when a focused check exists for the slice.
-11. Update these files under `.sdlc/work/<STORY-ID>/`:
-    - `changes.md`
-    - `session.md`
-12. Update `implementation-cache.json` and `impact-map.md` only if the actual touched files,
-    tests, or validation commands changed during implementation.
+7. Run only the narrowest `build_commands` recorded in `work.json` (the build, compile, or
+   type-check appropriate to the repository's tech stack — for example the project/module build
+   for a compiled language, or the type-check/lint-build for an interpreted one). Do not run a
+   full repository build when a focused one exists. Never run unit tests here. If no build
+   step exists for the stack, record `NOT_CONFIGURED`.
+   - If the build fails because of this change, fix the compile error and rebuild (this is part
+     of implementing, not bug fixing). If it still fails, return `STAGE_FAILED` with the error.
+8. Set `work.json` → `test_fix_loop` to `fix_iteration: 0`, `status: NOT_STARTED`,
+   `open_bugs: []` (fresh implementation starts a fresh test → fix loop).
+9. Update `.sdlc/work/<STORY-ID>/log.md`: set the status header (Implementation =
+   status, Current Stage = `UNIT_TESTING` pending) and append an entry with the changed files,
+   the build result, `Unit tests: NOT_RUN (not run in this stage)`, and the next recommended
+   command.
+10. Update `work.json` (and `plan.md` boundaries) only if the actual touched files or build
+    commands changed during implementation.
 
 ## Cost-Control Behavior
 - Cache first, then exact files only; do not reread the tracker or broad documentation.
@@ -92,26 +99,30 @@ Follow `.sdlc/framework/context-rules.md`, `.sdlc/framework/stage-rules.md`, the
   `.github/instructions/standards/*.instructions.md` files that auto-apply to the touched files;
   read a full `standards/*.md` file only for an exact rule or missing detail, and never reread
   the entire `standards/` folder.
-- Run the narrowest validation available, not the full suite.
-- Before any repository-wide search, honor `.sdlc/context/context-exclusions.json` (see
-  `.sdlc/framework/context-rules.md`); do not scan generated, dependency, build, cache, or log
+- Run the narrowest build only; never run tests in this stage.
+- Before any repository-wide search, honor `.sdlc/context/manifest.json` → `exclusions` (see
+  `.github/copilot-instructions.md`); do not scan generated, dependency, build, cache, or log
   paths listed there.
 - Correct the cache only when the actual touched slice changed.
 
 ## Outputs
-- Source code changes
-- `.sdlc/work/<STORY-ID>/changes.md`
-- `.sdlc/work/<STORY-ID>/session.md`
-- Optional cache corrections in `implementation-cache.json` and `impact-map.md`
+- Production source code changes (no test files)
+- `.sdlc/work/<STORY-ID>/log.md`
+- `work.json` → `test_fix_loop` reset
+- Optional cache corrections in `work.json` and `plan.md`
 
 ## Stop Condition
-STOP after implementation and validation. Do not invoke `/unit-testing`; recommend it only
-where appropriate. A human reviews the changes and invokes the next skill.
+STOP after implementation and the build check. Do not invoke `/unit-testing`; always recommend
+it, because the story is not verified until unit testing passes. A human reviews the changes and
+invokes the next skill.
 
 ```
 CURRENT STAGE: Story Implementation
-STATUS: STAGE_PASSED | BLOCKED_MISSING_INFORMATION
+STATUS: STAGE_PASSED | STAGE_FAILED | BLOCKED_MISSING_INFORMATION
 FILES CREATED/UPDATED: <list>
-SUMMARY: <code implemented from compact story cache>
-NEXT RECOMMENDED COMMAND: /unit-testing only when unit-test coverage for the implemented slice is wanted; otherwise None within the pipeline
+SUMMARY: <what was implemented per the plan>; Build: <command → result | NOT_CONFIGURED>; Unit tests: not run in this stage
+NEXT RECOMMENDED COMMAND: /unit-testing <STORY-ID> current_story
 ```
+
+- `STAGE_FAILED` (build still broken): `NEXT RECOMMENDED COMMAND: /implement-story <STORY-ID> — after the build error in SUMMARY is addressed`
+- `BLOCKED_MISSING_INFORMATION` (no story cache): `NEXT RECOMMENDED COMMAND: /analyze-story <STORY-ID>`

@@ -1,7 +1,7 @@
 ---
 name: fix-bugs
-description: "Primary SDLC stage. Fix an existing defect in the smallest possible code slice. Supports standalone bug fixing or attaching to an active story work folder (relationship modes: standalone, current_story, existing_work_id). Starts from a concrete bug anchor, reuses the compact cache, validates narrowly, and runs as an isolated forked skill. Use to diagnose and fix a reported bug."
-argument-hint: "<BUG-ID> <description> <mode: standalone|current_story|existing_work_id> <scoping hint>"
+description: "Primary SDLC stage. Fix defects in the smallest possible code slice — either the open bugs recorded by /unit-testing in work.json (test → fix loop, max 3 iterations) or a reported bug (standalone). Fixes production code only, runs only the tech-stack build (no unit tests; verification happens in /unit-testing), increments the loop counter, and runs as an isolated forked skill. Always followed by /unit-testing."
+argument-hint: "<WORK-ID | BUG-ID> <mode: standalone|current_story|existing_work_id> [description] [scoping hint]"
 user-invocable: true
 disable-model-invocation: true
 context: fork
@@ -13,9 +13,13 @@ Complete authoritative procedure for the `/fix-bugs` SDLC stage. Developers invo
 directly; there is no prompt wrapper or custom agent.
 
 ## Purpose
-Fix an existing defect in the smallest possible code slice. This stage supports both:
-- standalone bug fixing in a repository that already has implemented code
-- bug fixing attached to a currently active story work folder
+Fix defects in the smallest possible code slice as one iteration of the bounded test → fix loop
+(see `.github/copilot-instructions.md` → Story Flow and Test → Fix Loop). Sources of bugs:
+- **Loop mode** (`current_story` / `existing_work_id`): the bugs that `/unit-testing` recorded in
+  `work.json` → `test_fix_loop.open_bugs`.
+- **Standalone mode**: a reported bug in a repository that already has implemented code.
+
+This stage does not test. The fix is verified by the next `/unit-testing` run.
 
 ## Execution Context
 - `context: fork` — this skill runs as an isolated subagent in its own context window. The
@@ -23,130 +27,153 @@ Fix an existing defect in the smallest possible code slice. This stage supports 
 - This SKILL.md is the complete role and procedure. Do not create, delegate to, or invoke any
   custom agent or other skill from inside this stage.
 - Do not rely on prior conversation context. Cross-stage state comes only from persistent
-  `.sdlc/` artifacts (`.sdlc/context/*`, `.sdlc/work/<ID>/*`), with
-  `implementation-cache.json` as the authoritative scope.
+  `.sdlc/` artifacts (`.sdlc/context/*`, `.sdlc/work/<ID>/*`), with `work.json` as the
+  authoritative scope.
 - Write every required `.sdlc` artifact before returning; nothing else survives the fork.
 - Return only the concise outcome block from the Stop Condition, then STOP for human review.
 
 ## Role
-Bug fixer: diagnose the defect from the most concrete anchor available (suspected file, failing
-test, stack trace, endpoint, module, or reproduction path), apply the smallest root-cause fix
-rather than a workaround, and reproduce/validate narrowly before and after when feasible.
-- Keep the fix within the reported bug scope; no unrelated refactoring.
-- Permitted capabilities: `read`, `search`, `edit`, and `execute` (narrowest reproduction and
-  validation only).
+Bug fixer: diagnose each defect from its most concrete anchor (failing test, suspected file,
+stack trace, endpoint, module, or reproduction path), apply the smallest root-cause fix rather
+than a workaround, and confirm the slice builds.
+- Keep the fix within the bug scope; no unrelated refactoring.
+- Production source only. Do **not** create, edit, or delete unit tests, do not weaken or skip
+  a failing test, and do **not** run unit tests or coverage in this stage.
+- Permitted capabilities: `read`, `search`, `edit` (production source and `.sdlc` artifacts),
+  and `execute` (the build/compile/type-check command for the repository's tech stack only).
 - Do not reread external trackers, full standards documents, BRDs, or broad repository
   documentation when the cache is sufficient, and do not broad-scan when a concrete anchor
   exists.
 
 ## Required Input
-Ask the user for these if they are not already provided:
-- Bug ID
-- Bug description
-- Relationship mode: `standalone`, `current_story`, or `existing_work_id`
-- At least one scoping hint:
-  - suspected file
-  - module / feature / service name
-  - endpoint / screen
-  - failing test name
-  - stack trace location
-  - reproduction steps
+- Work ID (loop mode) or Bug ID (standalone)
+- Relationship mode: `standalone`, `current_story`, or `existing_work_id` (with the
+  `existing_work_id`)
 
-Ask for `existing_work_id` when relationship mode is `existing_work_id`.
+In loop mode the bug descriptions and anchors come from `work.json` → `test_fix_loop.open_bugs`;
+do not ask the user for them.
+
+In standalone mode with no work folder, also ask for:
+- Bug description
+- At least one scoping hint: suspected file, module / feature / service name, endpoint /
+  screen, failing test name, stack trace location, or reproduction steps
 
 If any required value is missing, ask the user for the missing fields first instead of stopping
-immediately. STOP with `BLOCKED_MISSING_INFORMATION` only when the user does not provide the
-missing bug ID, bug description, relationship mode, `existing_work_id` when required, or any
-scoping hint after the stage asks for them.
+immediately. STOP with `BLOCKED_MISSING_INFORMATION` only when the user does not provide them
+after the stage asks.
 
 ## Prerequisites
-`.sdlc/context/context-manifest.json` should exist. If it is missing, STOP and recommend
-`/setup-repo-context` first.
+- `.sdlc/context/manifest.json` should exist. If it is missing, STOP and recommend
+  `/setup-repo-context` first.
+- Loop mode: `test_fix_loop.status` must be `BUGS_OPEN` with at least one open bug. If there
+  are no open bugs, STOP with `BLOCKED_MISSING_INFORMATION` and recommend
+  `/unit-testing <WORK-ID> <mode>`.
+- **Loop limit guard:** if `test_fix_loop.fix_iteration` ≥ `max_fix_iterations` (3), do not fix
+  anything. Set `status: ESCALATED_TO_DEVELOPER`, log it, and STOP with `WAITING_FOR_HUMAN`.
 
 ## Shared Rules
-Follow `.sdlc/framework/context-rules.md`, `.sdlc/framework/stage-rules.md`,
-`.sdlc/config/effort-dial.md`, the applicable `.github/instructions/*.instructions.md`, and the
-global rules in `.github/copilot-instructions.md`. Do not duplicate those rules here.
+Follow the shared pipeline rules in `.github/copilot-instructions.md` (Read Order, Context
+Rules, Effort Dial, Stage Outputs, Story Flow and Test → Fix Loop, Next Command Rules,
+Repository Modes, exclusions) and the applicable `.github/instructions/*.instructions.md`. Do
+not duplicate those rules here.
 
 ## Procedure
-1. Read `.sdlc/config/effort-dial.md` and `.sdlc/framework/context-rules.md`.
-2. Resolve the work folder to use:
-   - if relationship mode is `current_story`, read the current in-progress story work folder
-     first
-   - if relationship mode is `existing_work_id`, read that explicit work folder first
-   - if relationship mode is `standalone`, use `.sdlc/work/<BUG-ID>/`
-3. Read any existing `session.md`, `implementation-cache.json`, `implementation-plan.md`,
-   `impact-map.md`, and `story-context.md` for that work folder before rereading repository
-   context.
-4. Perform a deterministic bug pre-pass before deeper reasoning:
-   - identify the most concrete anchor from the bug input
+1. Apply the Effort Dial, Read Order, and Context Rules. On `fix_iteration` 2 or 3, escalate the
+   effort mode one step (`low` → `standard` → `deep`): an earlier fix did not hold.
+2. Resolve the work folder:
+   - `current_story` → the current in-progress story work folder
+   - `existing_work_id` → that explicit work folder
+   - `standalone` → `.sdlc/work/<BUG-ID>/`
+3. Read `work.json` and `log.md` (and `plan.md` only for missing intent or boundaries). Apply
+   the Prerequisites and the loop limit guard.
+4. Standalone with no work folder: create `work.json`, `plan.md`, and `log.md` once from
+   `.sdlc/templates/`, recording the reported bug as the single `open_bugs` entry and its
+   expected behavior as `acceptance_criteria`, with `fix_iteration: 0`.
+5. Deterministic bug pre-pass for each open bug:
+   - take the most concrete anchor (failing test → code under test → suspected file)
    - identify the smallest exact source-file set needed for the fix
-   - identify the smallest exact test-file set or regression gap for the bug
-   - identify the narrowest reproduction and validation commands
-   - select applicable standard ids from `.sdlc/context/standards-index.json` based on the
-     touched file types/layers (record ids, not rule text; compact rules auto-apply through
-     `.github/instructions/standards/*.instructions.md`)
+   - identify the narrowest `build_commands`
+   - select applicable standard ids from `.sdlc/context/manifest.json` → `standards.items`
    - record any missing facts in the compact cache instead of broad-reading immediately
-5. Create or overwrite exactly once, never append, these files under `.sdlc/work/<ID>/` when a
-   standalone bug work folder does not already exist:
-   - `session.md`
-   - `story-context.md`
-   - `implementation-plan.md`
-   - `impact-map.md`
-   - `implementation-cache.json`
-6. Create `requirement-analysis.md` only when the bug is ambiguous, risky, or blocked.
-7. Investigate and fix the defect directly in this forked context, using only the compact work
-   cache, the relevant instructions, and the exact files identified by the cache or the bug
-   anchor.
-8. Reproduce the bug with the cheapest focused check when feasible. If no reproduction exists,
-   record `NOT_AVAILABLE` and validate with the cheapest discriminating command instead.
-9. Run the narrowest validation commands recorded in `implementation-cache.json`.
-10. Update these files under `.sdlc/work/<ID>/`:
-    - `changes.md`
-    - `session.md`
-11. Update `implementation-cache.json` and `impact-map.md` only if the actual touched files,
-    tests, anchors, or validation commands changed during bug fixing.
+   - on iterations 2–3, read the earlier Bug Fix log entries so the same failed fix is not
+     repeated
+6. Fill the Requirement Analysis section of `plan.md` only when a bug is ambiguous, risky, or
+   blocked.
+7. Fix every open bug at its root cause, using only the compact work cache, the relevant
+   instructions, and the exact files identified by the cache or the bug anchor.
+8. Run only the narrowest `build_commands` for the repository's tech stack (`NOT_CONFIGURED`
+   when no build step exists). Fix any compile error introduced by the fix. Never run unit
+   tests here.
+9. Update `work.json` → `test_fix_loop`: increment `fix_iteration` by 1 and keep `open_bugs`
+   (marked as "fix applied, pending retest") so `/unit-testing` knows what to regression-test.
+10. Update `.sdlc/work/<ID>/log.md`: set the status header (Bug Fix status, Test → Fix Loop
+    `<fix_iteration>/3`, Current Stage `UNIT_TESTING`) and append an entry with the bugs
+    addressed, root cause per bug, changed files, build result, `Unit tests: NOT_RUN (verified
+    in /unit-testing)`, and the next recommended command.
+11. Update `work.json` (and `plan.md` boundaries) only if the actual touched files, anchors, or
+    build commands changed during bug fixing.
 
 ## Cost-Control Behavior
-- Do not broad-scan the repository when the bug input already provides a file, failing test,
-  stack trace location, endpoint, or module anchor.
-- Reuse an existing `implementation-cache.json` first. Only read markdown work artifacts or
-  shared repository context for explicit missing facts.
+- Do not broad-scan the repository when the bug already provides a failing test, file, stack
+  trace location, endpoint, or module anchor.
+- Reuse an existing `work.json` first. Only read markdown work artifacts or shared repository
+  context for explicit missing facts.
 - For standards, rely on the `selected_standards` ids and the compact
   `.github/instructions/standards/*.instructions.md` files that auto-apply to the touched files;
   read a full `standards/*.md` file only for an exact rule or missing detail, and never reread
   the entire `standards/` folder.
 - Read the smallest local slice first.
-- Keep exact file inventories compact unless the defect genuinely crosses more boundaries.
-- If the bug description is too vague to identify one concrete anchor, ask for one scoping hint
-  instead of exploring broadly.
-- Before any repository-wide search, honor `.sdlc/context/context-exclusions.json` (see
-  `.sdlc/framework/context-rules.md`); do not scan generated, dependency, build, cache, or log
+- If a standalone bug description is too vague to identify one concrete anchor, ask for one
+  scoping hint instead of exploring broadly.
+- Before any repository-wide search, honor `.sdlc/context/manifest.json` → `exclusions` (see
+  `.github/copilot-instructions.md`); do not scan generated, dependency, build, cache, or log
   paths listed there.
 
 ## Outputs
-- Source code changes
-- `.sdlc/work/<ID>/changes.md`
-- `.sdlc/work/<ID>/session.md`
-- Optional cache corrections in `implementation-cache.json` and `impact-map.md`
+- Production source fixes (no test files)
+- `.sdlc/work/<ID>/log.md`
+- `work.json` → `test_fix_loop.fix_iteration`, plus optional cache corrections in `work.json`
+  and `plan.md`
 
 ## Stop Condition
-STOP after the bug fix and focused validation. Do not invoke another skill; a human reviews the
-fix and invokes the next skill. If required inputs remain missing after asking the user for
-them, STOP with `BLOCKED_MISSING_INFORMATION`.
+STOP after the fix and the build check. Do not invoke `/unit-testing`; always recommend it —
+the fix is not verified until unit tests pass.
 
+Fix applied:
+```
+CURRENT STAGE: Bug Fix
+STATUS: STAGE_PASSED
+FILES CREATED/UPDATED: <list>
+SUMMARY: Fixed <bug ids>: <one-line root cause each>; Build: <command → result | NOT_CONFIGURED>; Unit tests: not run in this stage
+TEST → FIX LOOP: <fix_iteration>/3 — fix applied, pending retest
+NEXT RECOMMENDED COMMAND: /unit-testing <WORK-ID> <same relationship mode>
+```
+
+Build still broken after the fix:
+```
+CURRENT STAGE: Bug Fix
+STATUS: STAGE_FAILED
+FILES CREATED/UPDATED: <list>
+SUMMARY: <build error>
+TEST → FIX LOOP: <fix_iteration>/3
+NEXT RECOMMENDED COMMAND: None — developer to resolve the build error, then /unit-testing <WORK-ID> <mode>
+```
+
+Loop limit reached:
+```
+CURRENT STAGE: Bug Fix
+STATUS: WAITING_FOR_HUMAN
+FILES CREATED/UPDATED: <work.json, log.md>
+SUMMARY: 3 fix iterations already used; open bugs <ids> need developer investigation
+TEST → FIX LOOP: 3/3 — ESCALATED_TO_DEVELOPER
+NEXT RECOMMENDED COMMAND: None — escalated to developer
+```
+
+Missing inputs or no open bugs:
 ```
 CURRENT STAGE: Bug Fix
 STATUS: BLOCKED_MISSING_INFORMATION
 FILES CREATED/UPDATED: None
-SUMMARY: <missing required bug-fix inputs>
-NEXT RECOMMENDED COMMAND: None within the pipeline
-```
-
-```
-CURRENT STAGE: Bug Fix
-STATUS: STAGE_PASSED | BLOCKED_MISSING_INFORMATION
-FILES CREATED/UPDATED: <list>
-SUMMARY: <bug fixed from compact work cache with changed files recorded>
-NEXT RECOMMENDED COMMAND: /implement-story only when the same story still has unfinished planned work; otherwise None within the pipeline
+SUMMARY: <missing bug-fix inputs | no open bugs in work.json>
+NEXT RECOMMENDED COMMAND: /fix-bugs <ID> <mode> once inputs are supplied | /unit-testing <WORK-ID> <mode> when there are no open bugs
 ```

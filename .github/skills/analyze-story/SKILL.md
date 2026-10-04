@@ -1,6 +1,6 @@
 ---
 name: analyze-story
-description: "Primary SDLC stage. Begin story work from user-provided story details by producing compact human-review artifacts and the authoritative machine-readable `implementation-cache.json`. Runs a deterministic pre-pass, classifies the story (SIMPLE / AMBIGUOUS / STALE_REPLAN), identifies the smallest exact file set, and runs as an isolated forked skill. Use when starting or re-planning a story."
+description: "Primary SDLC stage. Begin story work from user-provided story details by producing compact human-review artifacts (`plan.md`, `log.md`) and the authoritative machine-readable `work.json`. Runs a deterministic pre-pass, classifies the story (SIMPLE / AMBIGUOUS / STALE_REPLAN), identifies the smallest exact file set, and runs as an isolated forked skill. Use when starting or re-planning a story."
 argument-hint: "<STORY-ID>"
 user-invocable: true
 disable-model-invocation: true
@@ -13,10 +13,10 @@ Complete authoritative procedure for the `/analyze-story` SDLC stage. Developers
 skill directly; there is no prompt wrapper or custom agent.
 
 ## Purpose
-Begin story work with compact story artifacts and a machine-readable implementation cache.
-`implementation-cache.json` is the authoritative machine-readable output for later stages. The
-markdown artifacts are thin human-review documents and must not repeat inventories already
-owned by the cache.
+Begin story work with compact story artifacts and a machine-readable work cache.
+`work.json` is the authoritative machine-readable output for later stages. `plan.md` and
+`log.md` are thin human-review documents and must not repeat inventories already owned by
+`work.json`.
 
 ## Execution Context
 - `context: fork` — this skill runs as an isolated subagent in its own context window. The
@@ -52,20 +52,21 @@ Do not fetch the story from Jira, MCP, Confluence, or any other external source.
 If any of these is missing, STOP with `BLOCKED_MISSING_INFORMATION`.
 
 ## Shared Rules
-Follow `.sdlc/framework/context-rules.md`, `.sdlc/framework/stage-rules.md`,
-`.sdlc/config/effort-dial.md`, and the global rules in `.github/copilot-instructions.md`. Do
-not duplicate those rules here.
+Follow the shared pipeline rules in `.github/copilot-instructions.md` (Read Order, Context
+Rules, Effort Dial, Stage Outputs, Repository Modes, exclusions). Do not duplicate those rules here.
 
 ## Procedure
-1. Read `.sdlc/config/effort-dial.md` and any existing `.sdlc/work/<STORY-ID>/session.md`.
-2. Follow `.sdlc/framework/context-rules.md`.
+1. Apply the Effort Dial and read any existing `.sdlc/work/<STORY-ID>/log.md`.
+2. Follow the Read Order and Context Rules.
 3. Perform a deterministic pre-pass before deeper reasoning:
    - identify likely touched layers
    - identify the smallest concrete scope anchors available from the story
    - identify likely exact source files, capped to the smallest useful set
    - identify likely exact tests, capped to the smallest useful set
-   - identify build/test commands
-   - select applicable standard ids from `.sdlc/context/standards-index.json` based on the
+   - identify the narrowest build/compile command for the tech stack (used by
+     `/implement-story` and `/fix-bugs`) and the narrowest unit-test and coverage commands
+     (used only by `/unit-testing`)
+   - select applicable standard ids from `.sdlc/context/manifest.json` → `standards.items` based on the
      touched file types/layers (for example `coding`, `backend-dotnet`, `api-rest`,
      `database`). Record ids, not rule text; the compact rules auto-apply through
      `.github/instructions/standards/*.instructions.md`.
@@ -75,50 +76,50 @@ not duplicate those rules here.
    - `STALE_REPLAN`
 5. Perform the requirement analysis directly in this forked context, using only the compact
    repository cache, the user-provided story inputs, and the deterministic pre-pass output.
-6. Create or overwrite exactly once, never append, these files under `.sdlc/work/<STORY-ID>/`:
-   - `session.md`
-   - `story-context.md`
-   - `implementation-plan.md`
-   - `impact-map.md`
-   - `implementation-cache.json`
-7. Create `requirement-analysis.md` only when the case is `AMBIGUOUS`, or when unresolved
-   questions remain after the pre-pass.
+6. Create or overwrite exactly once, never append, these files under `.sdlc/work/<STORY-ID>/`
+   from `.sdlc/templates/`:
+   - `work.json`
+   - `plan.md`
+   - `log.md` (status header plus the first entry for this run)
+7. Fill the Requirement Analysis section of `plan.md` only when the case is `AMBIGUOUS`, or
+   when unresolved questions remain after the pre-pass; otherwise write "Not required".
 8. Keep each file compact and non-duplicated. Do not repeat standards, architecture, or
    impacted file lists across multiple files when one file already owns that fact.
-9. Write `implementation-cache.json` as the authoritative source of truth for:
+9. Write `work.json` as the authoritative source of truth for:
+   - acceptance criteria, split into testable items with ids (`AC1`, `AC2`, …) — these are what
+     `/unit-testing` verifies
    - exact source files
    - exact test files
    - scope anchors
    - selected standards references, recorded as standard ids from
-     `.sdlc/context/standards-index.json` (for example
+     `.sdlc/context/manifest.json` → `standards.items` (for example
      `selected_standards: ["coding", "backend-dotnet", "api-rest"]`)
-   - validation, coverage, and reproduction commands
+   - `build_commands`, `unit_test_commands`, and `coverage_commands`
+   - `test_fix_loop` initialized to `max_fix_iterations: 3`, `fix_iteration: 0`,
+     `status: NOT_STARTED`, `open_bugs: []`
    - unresolved questions and missing facts
 10. Keep compact limits unless the story truly requires broader scope:
     - exact source files: at most 5
     - exact test files: at most 3
     - selected standards: at most 5
-11. For `SIMPLE` stories, keep `story-context.md`, `implementation-plan.md`, and
-    `impact-map.md` to the smallest useful human-review summary. Do not copy long acceptance
+11. For `SIMPLE` stories, keep `plan.md` to the smallest useful human-review summary. Do not copy long acceptance
     criteria blocks or duplicate the exact file inventory from the cache.
 
 ## Cost-Control Behavior
-- `implementation-cache.json` is the single authoritative scope record; markdown artifacts stay
-  thin and must not duplicate it.
+- `work.json` is the single authoritative scope record; `plan.md` and `log.md` stay thin and
+  must not duplicate it.
 - Honor the file-count caps above unless the story genuinely crosses more boundaries.
-- Write `requirement-analysis.md` only for `AMBIGUOUS` cases or unresolved questions.
+- Fill the plan's Requirement Analysis section only for `AMBIGUOUS` cases or unresolved
+  questions.
 - Do not broad-scan the repository when the story already yields concrete anchors.
-- Before any repository-wide search, honor `.sdlc/context/context-exclusions.json` (see
-  `.sdlc/framework/context-rules.md`); do not scan generated, dependency, build, cache, or log
+- Before any repository-wide search, honor `.sdlc/context/manifest.json` → `exclusions` (see
+  `.github/copilot-instructions.md`); do not scan generated, dependency, build, cache, or log
   paths listed there.
 
 ## Outputs
-- `.sdlc/work/<STORY-ID>/session.md`
-- `.sdlc/work/<STORY-ID>/story-context.md`
-- `.sdlc/work/<STORY-ID>/implementation-plan.md`
-- `.sdlc/work/<STORY-ID>/impact-map.md`
-- `.sdlc/work/<STORY-ID>/implementation-cache.json`
-- Optional: `.sdlc/work/<STORY-ID>/requirement-analysis.md`
+- `.sdlc/work/<STORY-ID>/work.json`
+- `.sdlc/work/<STORY-ID>/plan.md`
+- `.sdlc/work/<STORY-ID>/log.md`
 
 ## Stop Condition
 STOP after the compact story cache is written. Do not invoke `/implement-story`; only
@@ -128,6 +129,8 @@ recommend it. A human reviews the artifacts and invokes the next skill.
 CURRENT STAGE: Story Analysis
 STATUS: STAGE_PASSED | BLOCKED_MISSING_INFORMATION
 FILES CREATED/UPDATED: <list>
-SUMMARY: <compact story cache created>
-NEXT RECOMMENDED COMMAND: /implement-story
+SUMMARY: <compact story cache created; case; number of acceptance criteria>
+NEXT RECOMMENDED COMMAND: /implement-story <STORY-ID>
 ```
+
+When blocked: `NEXT RECOMMENDED COMMAND: /analyze-story <STORY-ID> — once <missing input> is supplied`.

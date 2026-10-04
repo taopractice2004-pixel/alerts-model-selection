@@ -32,6 +32,7 @@ try
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+    builder.Services.Configure<AlertSuppressionOptions>(builder.Configuration.GetSection(AlertSuppressionOptions.SectionName));
 
     builder.Services.AddSqlDataAccess(builder.Configuration);   // DbContext + repositories
     builder.Services.AddAlertHealthChecks();
