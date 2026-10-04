@@ -1,0 +1,88 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate alerts on POST /api/alerts within a configurable time window, returning the existing active alert with a suppression header instead of creating a new row.",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "On POST /api/alerts, if an active alert with the same Title (case-insensitive) and same Severity was created within the last configurable window (default 15 minutes), do not create a new row." },
+    { "id": "AC2", "text": "When suppressed, respond 200 OK with the existing matching alert in the body and response header 'X-Duplicate-Suppressed: true'." },
+    { "id": "AC3", "text": "A genuinely new (non-duplicate) alert still creates a row and returns 201 Created (without the suppression header)." },
+    { "id": "AC4", "text": "The suppression window in minutes is read from appsettings.json configuration and is not hardcoded." },
+    { "id": "AC5", "text": "Do not suppress when the candidate matches a prior alert of a different Severity." },
+    { "id": "AC6", "text": "Do not suppress when the only matching prior alert (same Title + Severity, within window) is inactive (IsActive = false)." }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts endpoint: AlertsController.Create",
+    "AlertManagementService.CreateAsync (duplicate-suppression decision)",
+    "IAlertRepository duplicate lookup over AlertDbContext.Alerts",
+    "appsettings.json suppression-window configuration"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json",
+    "AlertService.API/Program.cs",
+    "AlertService.API/Configuration/AlertSuppressionOptions.cs (new)",
+    "AlertService.DTO/Responses/AlertCreationStatus.cs (new)",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (ToResponse / ToEntity reuse, read-only)",
+    "AlertService.DTO/Requests/CreateAlertRequest.cs (Title + Severity source, read-only)",
+    "AlertService.DTO/Responses/AlertResponse.cs (response body shape, read-only)",
+    "AlertService.Common/Enums/Severity.cs (equality on Severity, read-only)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "service-architecture",
+    "database"
+  ],
+  "constraints": [
+    "Suppression window (minutes) must come from appsettings.json via bound options, never a hardcoded literal in service/repository code.",
+    "Title match is case-insensitive; Severity match is exact; only active (IsActive = true) prior alerts qualify.",
+    "Use the existing injected TimeProvider for 'now' when computing the window threshold; do not use DateTime.UtcNow directly.",
+    "Keep controller HTTP-only (status code + header) and keep business decision in the service layer, matching existing layering.",
+    "Do not change DTO request contract; CreateAlertRequest already carries Title, Severity, IsActive.",
+    "Preserve existing 201 Created + CreatedAtRoute behavior for non-duplicate alerts."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage for suppression decision: duplicate within window suppressed; new alert created; different severity not suppressed; inactive prior not suppressed; boundary just outside window not suppressed."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files_and_add_cases_for_suppression",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "RESOLVED in /implement-story: suppression window is bound from appsettings.json section 'AlertSuppression' key 'WindowMinutes' (default 15 when unset, via AlertSuppressionOptions.WindowMinutes). Suppression signalled to the controller via (AlertCreationStatus, AlertResponse) tuple; header name 'X-Duplicate-Suppressed' lives in AlertConstants.DuplicateSuppressedHeader."
+  ]
+}

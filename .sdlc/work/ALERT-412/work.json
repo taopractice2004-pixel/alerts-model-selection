@@ -1,0 +1,89 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends?days=N (default 7, min 1, max 90) returning one bucket per UTC calendar day for the last N days (oldest first), each with a total count and per-severity counts, with zero-filled days/severities and 400 ValidationProblemDetails on invalid days.",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "GET /api/alerts/trends with no days parameter returns 7 daily buckets (default); days=N within [1,90] returns N buckets." },
+    { "id": "AC2", "text": "Buckets are one per UTC calendar day covering the last N days, ordered oldest day first." },
+    { "id": "AC3", "text": "Each bucket includes its UTC day, a total alert-creation count, and a count per severity (Low, Medium, High, Critical)." },
+    { "id": "AC4", "text": "Days with no alerts, and severities with no alerts within a day, appear with explicit zero counts (no missing days or severities)." },
+    { "id": "AC5", "text": "Per-severity ordering/naming reuses the existing summary severity convention (Severity enum order Low to Critical)." },
+    { "id": "AC6", "text": "Invalid days (below 1, above 90, or non-numeric) returns 400 with ValidationProblemDetails, consistent with existing query-parameter validation." }
+  ],
+  "scope_anchors": [
+    "New GET /api/alerts/trends endpoint: AlertsController",
+    "AlertManagementService trend aggregation + zero-fill assembly (mirrors GetSummaryAsync)",
+    "IAlertRepository daily-count aggregation over AlertDbContext.Alerts grouped by UTC date",
+    "New AlertTrendQueryRequest with [Range(1,90)] days validation (mirrors AlertQueryRequest)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertTrendQueryRequest.cs (new)",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs (new)",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs (new)",
+    "AlertService.Common/Constants/AlertConstants.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Common/Enums/Severity.cs (severity ordering Low..Critical, read-only)",
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs (reuse per-severity count shape, read-only)",
+    "AlertService.DTO/Responses/AlertSummaryResponse.cs (summary endpoint pattern reference, read-only)",
+    "AlertService.Models/Alert.cs (CreatedDate + Severity source fields, read-only)",
+    "AlertService.API/Program.cs (TimeProvider DI already registered; no change expected)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "service-architecture",
+    "database"
+  ],
+  "constraints": [
+    "Compute 'today'/now in UTC via the injected TimeProvider, never DateTime.UtcNow directly, matching existing service code.",
+    "Bucket by UTC calendar date of Alert.CreatedDate (stored UTC); each bucket represents one whole UTC day.",
+    "Keep AlertsController HTTP-only; do trend aggregation + zero-fill in the service; keep the raw grouped query in the repository, matching existing layering.",
+    "Zero-fill every UTC day in the requested range and every severity so all days/severities are present even with no alerts.",
+    "Validate days via DataAnnotations [Range(1,90)] on a bound query request type (default 7), mirroring AlertQueryRequest so invalid/out-of-range/non-numeric input yields ValidationProblemDetails automatically under [ApiController].",
+    "Reuse the existing AlertSeverityCountsResponse shape for per-bucket severity counts; add new response types only for the trend envelope and per-day bucket.",
+    "No database schema or migration change is required."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "dotnet test --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage for the trend endpoint: default 7 days; explicit valid days; oldest-first ordering; total and per-severity counts; zero-filled empty days/severities; days=1 and days=90 boundaries accepted; days=0, days=91, and non-numeric rejected with 400 ValidationProblemDetails."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files_and_add_cases_for_trends",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "Non-blocking (resolve in /implement-story): confirm the trend day-count constants (default 7, min 1, max 90) are added to AlertConstants, and decide whether daily grouping is done in SQL (GroupBy on CreatedDate.Date) with zero-fill in the service, or counts pulled and bucketed in the service. Recommended: SQL groups by UTC date, service zero-fills the full range and every severity."
+  ]
+}

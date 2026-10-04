@@ -311,6 +311,57 @@ public class AlertRepositoryTests : IDisposable
         Assert.Equal(2, result.CriticalCount);
     }
 
+    // AC2 + AC3: counts are grouped by UTC calendar day and severity.
+    [Fact]
+    public async Task GetDailySeverityCountsAsync_GroupsByUtcDayAndSeverity()
+    {
+        await _repository.AddAsync(NewAlert("A", Severity.Low, new DateTime(2026, 9, 1, 3, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("B", Severity.Low, new DateTime(2026, 9, 1, 20, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("C", Severity.High, new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("D", Severity.Low, new DateTime(2026, 9, 2, 1, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 3, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(2, result.Single(r => r.DayUtc == new DateTime(2026, 9, 1) && r.Severity == Severity.Low).Count);
+        Assert.Equal(1, result.Single(r => r.DayUtc == new DateTime(2026, 9, 1) && r.Severity == Severity.High).Count);
+        Assert.Equal(1, result.Single(r => r.DayUtc == new DateTime(2026, 9, 2) && r.Severity == Severity.Low).Count);
+    }
+
+    // AC2: the range is half-open [fromUtcInclusive, toUtcExclusive).
+    [Fact]
+    public async Task GetDailySeverityCountsAsync_RespectsHalfOpenRange()
+    {
+        await _repository.AddAsync(NewAlert("before", Severity.Low, new DateTime(2026, 8, 31, 23, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("start", Severity.Low, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("inside", Severity.High, new DateTime(2026, 9, 1, 23, 59, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("end", Severity.Low, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, r => Assert.Equal(new DateTime(2026, 9, 1), r.DayUtc));
+        Assert.Equal(1, result.Single(r => r.Severity == Severity.Low).Count);
+        Assert.Equal(1, result.Single(r => r.Severity == Severity.High).Count);
+    }
+
+    // AC4: no alerts in the range yields an empty result (the service zero-fills the buckets).
+    [Fact]
+    public async Task GetDailySeverityCountsAsync_WhenNoAlertsInRange_ReturnsEmpty()
+    {
+        await _repository.AddAsync(NewAlert("out of range", Severity.Low, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 8, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Empty(result);
+    }
+
     [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
@@ -354,5 +405,199 @@ public class AlertRepositoryTests : IDisposable
         await _repository.DeleteAsync(added);
 
         Assert.False(await _context.Alerts.AnyAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsToAlertAsync_CreatesTagRows_AndPersistsJoin()
+    {
+        var (connection, context, repository) = await CreateSqliteAsync();
+        await using var _c = connection;
+        await using var _ctx = context;
+
+        var alert = await repository.AddAsync(NewAlert("Tagged"));
+
+        await repository.AddTagsToAlertAsync(alert, new[] { "database", "prod" });
+
+        context.ChangeTracker.Clear();
+        var reloaded = await context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == alert.Id);
+        Assert.Equal(new[] { "database", "prod" }, reloaded.Tags.Select(t => t.Name).OrderBy(n => n).ToArray());
+        Assert.Equal(2, await context.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsToAlertAsync_ReusesExistingTagRow_CaseInsensitive()
+    {
+        var (connection, context, repository) = await CreateSqliteAsync();
+        await using var _c = connection;
+        await using var _ctx = context;
+
+        var first = await repository.AddAsync(NewAlert("First"));
+        await repository.AddTagsToAlertAsync(first, new[] { "database" });
+
+        var second = await repository.AddAsync(NewAlert("Second"));
+        await repository.AddTagsToAlertAsync(second, new[] { "DATABASE" });
+
+        Assert.Equal(1, await context.Tags.CountAsync());
+        context.ChangeTracker.Clear();
+        var reloaded = await context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == second.Id);
+        Assert.Equal(new[] { "database" }, reloaded.Tags.Select(t => t.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task RemoveTagFromAlertAsync_RemovesAssociation_ButKeepsTagRow()
+    {
+        var (connection, context, repository) = await CreateSqliteAsync();
+        await using var _c = connection;
+        await using var _ctx = context;
+
+        var alert = await repository.AddAsync(NewAlert("Tagged"));
+        await repository.AddTagsToAlertAsync(alert, new[] { "database", "prod" });
+
+        var tracked = await repository.GetByIdAsync(alert.Id);
+        var toRemove = tracked!.Tags.Single(t => t.Name == "database");
+        await repository.RemoveTagFromAlertAsync(tracked, toRemove);
+
+        context.ChangeTracker.Clear();
+        var reloaded = await context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == alert.Id);
+        Assert.Equal(new[] { "prod" }, reloaded.Tags.Select(t => t.Name).ToArray());
+        Assert.Equal(2, await context.Tags.CountAsync()); // shared tag row retained
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_ReturnsCaseInsensitiveMatches()
+    {
+        var (connection, context, repository) = await CreateSqliteAsync();
+        await using var _c = connection;
+        await using var _ctx = context;
+
+        var dbAlert = await repository.AddAsync(NewAlert("Has database tag", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await repository.AddTagsToAlertAsync(dbAlert, new[] { "Database" });
+        var otherAlert = await repository.AddAsync(NewAlert("Has prod tag", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await repository.AddTagsToAlertAsync(otherAlert, new[] { "prod" });
+
+        var result = await repository.GetAllAsync(tag: "DATABASE");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("Has database tag", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilterAndOtherFilters_ReturnsOnlyAlertsMatchingAllCriteria()
+    {
+        var (connection, context, repository) = await CreateSqliteAsync();
+        await using var _c = connection;
+        await using var _ctx = context;
+
+        var match = await repository.AddAsync(NewAlert("Disk prod active", Severity.Critical, new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        await repository.AddTagsToAlertAsync(match, new[] { "prod" });
+        var wrongTag = await repository.AddAsync(NewAlert("Disk staging active", Severity.Critical, new DateTime(2026, 2, 11, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        await repository.AddTagsToAlertAsync(wrongTag, new[] { "staging" });
+        var wrongActive = await repository.AddAsync(NewAlert("Disk prod inactive", Severity.Critical, new DateTime(2026, 2, 12, 0, 0, 0, DateTimeKind.Utc), isActive: false));
+        await repository.AddTagsToAlertAsync(wrongActive, new[] { "prod" });
+
+        var result = await repository.GetAllAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            search: "disk",
+            tag: "prod");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("Disk prod active", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_IncludesTags()
+    {
+        var (connection, context, repository) = await CreateSqliteAsync();
+        await using var _c = connection;
+        await using var _ctx = context;
+
+        var alert = await repository.AddAsync(NewAlert("Tagged"));
+        await repository.AddTagsToAlertAsync(alert, new[] { "database", "prod" });
+        context.ChangeTracker.Clear();
+
+        var result = await repository.GetByIdAsync(alert.Id);
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { "database", "prod" }, result!.Tags.Select(t => t.Name).OrderBy(n => n).ToArray());
+    }
+
+    // AC1: an active, same-severity, same-title (case-insensitive) alert inside the window is found, newest first.
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenActiveMatchWithinWindow_ReturnsMostRecent()
+    {
+        var windowStart = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created: windowStart.AddMinutes(5)));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created: windowStart.AddMinutes(10)));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, windowStart);
+
+        Assert.NotNull(result);
+        Assert.Equal(windowStart.AddMinutes(10), result!.CreatedDate);
+    }
+
+    // AC1: title matching is case-insensitive.
+    [Fact]
+    public async Task FindActiveDuplicateAsync_MatchesTitleCaseInsensitively()
+    {
+        var windowStart = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk Full", Severity.High, created: windowStart.AddMinutes(5)));
+
+        var result = await _repository.FindActiveDuplicateAsync("  disk full  ", Severity.High, windowStart);
+
+        Assert.NotNull(result);
+    }
+
+    // AC5: a prior alert of a different severity is not a duplicate.
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenDifferentSeverity_ReturnsNull()
+    {
+        var windowStart = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Low, created: windowStart.AddMinutes(5)));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, windowStart);
+
+        Assert.Null(result);
+    }
+
+    // AC6: an inactive prior alert does not suppress.
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenPriorIsInactive_ReturnsNull()
+    {
+        var windowStart = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created: windowStart.AddMinutes(5), isActive: false));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, windowStart);
+
+        Assert.Null(result);
+    }
+
+    // Boundary: a match created before the window start is not returned.
+    [Fact]
+    public async Task FindActiveDuplicateAsync_WhenCreatedBeforeWindowStart_ReturnsNull()
+    {
+        var windowStart = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, created: windowStart.AddMinutes(-1)));
+
+        var result = await _repository.FindActiveDuplicateAsync("Disk full", Severity.High, windowStart);
+
+        Assert.Null(result);
+    }
+
+    private static async Task<(SqliteConnection Connection, AlertDbContext Context, AlertRepository Repository)> CreateSqliteAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AlertDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var context = new AlertDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        return (connection, context, new AlertRepository(context));
     }
 }

@@ -1,0 +1,84 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "empty",
+  "tracker": "ALERT",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Alert Tagging: attach multiple free-form tags to an alert (many-to-many), add/remove tag endpoints, optional tag filter on list, and tags in AlertResponse.",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "A new Tag concept exists with a many-to-many relationship to Alert, persisted via a new join table and an EF Core migration (plus matching database/*.sql scripts)." },
+    { "id": "AC2", "text": "POST /api/alerts/{id}/tags accepts one or more tags and adds them to the alert, returning the updated alert (with its tags)." },
+    { "id": "AC3", "text": "POST /api/alerts/{id}/tags dedupes tags case-insensitively so an alert never holds two tags that differ only in case, and adding an already-present tag is a no-op." },
+    { "id": "AC4", "text": "POST /api/alerts/{id}/tags rejects the request (400) when the resulting tag set would exceed 10 tags per alert, or when any supplied tag is not 1-30 characters after trimming." },
+    { "id": "AC5", "text": "POST /api/alerts/{id}/tags returns 404 when no alert with the given id exists." },
+    { "id": "AC6", "text": "DELETE /api/alerts/{id}/tags/{tag} removes the tag assignment from the alert and returns success (e.g. 204)." },
+    { "id": "AC7", "text": "DELETE /api/alerts/{id}/tags/{tag} returns 404 when the alert does not exist or the tag is not assigned to the alert (case-insensitive match)." },
+    { "id": "AC8", "text": "GET /api/alerts accepts an optional 'tag' query parameter that filters alerts to those carrying that tag (case-insensitive), composable with the existing isActive, severity, CreatedFrom/CreatedTo, and search filters." },
+    { "id": "AC9", "text": "AlertResponse includes the alert's tags, and they are returned by all endpoints that return an AlertResponse (list, get-by-id, create, update, deactivate, tag add)." }
+  ],
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs (new tag endpoints)",
+    "AlertService.API/Services/AlertManagementService.cs + IAlertService.cs (tag add/remove business logic)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs + AlertService.Data.SQL/Repositories/AlertRepository.cs (tag persistence + tag filter in GetAllAsync)",
+    "AlertService.Models/Alert.cs + new Tag entity (many-to-many navigation)",
+    "AlertService.Data.SQL migration + database/*.sql (join table)"
+  ],
+  "exact_source_files": [
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Models/Alert.cs (add Tags navigation)",
+    "AlertService.API/Services/IAlertService.cs (add tag operations)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs (tag filter + tag persistence signatures)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs (add Tag filter)",
+    "AlertService.DTO/Requests (new AddTagsRequest.cs)",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (map Tags into AlertResponse)",
+    "AlertService.DTO/Responses/TagOperationStatus.cs (new result enum for tag add/remove outcomes)",
+    "AlertService.Data.SQL/AlertDbContext.cs (DbSet<Tag> / many-to-many)",
+    "AlertService.Data.SQL/Configurations (new TagConfiguration.cs)",
+    "AlertService.Data.SQL/Migrations (new migration for join table)",
+    "AlertService.Common/Constants/AlertConstants.cs (tag count/length constants)",
+    "database/02_AlertServiceDb_Migrations.sql (join table DDL)"
+  ],
+  "selected_standards": ["coding", "backend-dotnet", "api-rest", "database", "service-architecture"],
+  "constraints": [
+    "Follow the existing layered flow: controller -> IAlertService -> IAlertRepository; controllers never see entities, service returns DTOs only.",
+    "Tags are free-form strings; dedupe and filter case-insensitively, consistent with the existing case-insensitive Search filter.",
+    "Max 10 tags per alert; each tag 1-30 characters after trimming; centralize limits as AlertConstants (mirror existing constant pattern).",
+    "Persist the enum/collection using EF configuration classes (ApplyConfigurationsFromAssembly), matching AlertConfiguration conventions; keep EF out of the service layer.",
+    "Provide both an EF Core migration and a matching hand-maintained database/*.sql script, consistent with the existing database/ scripts.",
+    "Do not change unrelated alert fields, sorting, paging, or summary behavior."
+  ],
+  "build_commands": ["dotnet build AlertService.sln"],
+  "unit_test_commands": ["dotnet test AlertService.sln"],
+  "coverage_commands": ["dotnet test AlertService.sln --collect:\"XPlat Code Coverage\""],
+  "coverage_goals": [
+    "Behavior coverage for tag add (dedupe, max-10, 1-30 length, 404), tag remove (success, 404 alert/assignment), tag filter composability, and tags present in AlertResponse."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "Shape of tags in AlertResponse: list of plain strings (recommended, matches free-form tags) vs list of {id,name} objects — assumed plain strings unless reviewer decides otherwise.",
+    "DELETE tag route: whether the {tag} segment carries raw tag text (needs URL-encoding and a catch-all/constraint for characters like '.'/'/') or whether removal should instead take the tag in the body/query — assumed encoded path segment matched case-insensitively.",
+    "Whether Tag rows are shared/reused across alerts (unique tag name reused via join) or duplicated per alert — assumed shared unique tag names referenced by the join table."
+  ]
+}
