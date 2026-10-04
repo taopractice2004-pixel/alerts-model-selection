@@ -1,0 +1,94 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add a daily alert-trend endpoint that returns UTC day buckets with total and per-severity counts for the trailing window, with existing query-validation behavior for the days parameter.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "GET /api/alerts/trends?days=N returns one bucket per UTC calendar day for the last N days, ordered oldest first, with each bucket representing a full day in the trailing window."
+    },
+    {
+      "id": "AC2",
+      "text": "Each trend bucket includes the day's total alert count and counts for each severity in the existing Low, Medium, High, Critical ordering, including zero-count days and zero-count severities."
+    },
+    {
+      "id": "AC3",
+      "text": "The days query parameter defaults to 7 when omitted and accepts only values from 1 through 90."
+    },
+    {
+      "id": "AC4",
+      "text": "If days is non-numeric or outside the allowed range, the endpoint returns 400 with ValidationProblemDetails consistent with the API's existing query-validation behavior."
+    }
+  ],
+  "scope_anchors": [
+    "GET /api/alerts/trends?days=N",
+    "AlertsController summary/trends read endpoints",
+    "AlertManagementService aggregate read methods",
+    "IAlertRepository aggregate query contract",
+    "AlertRepository aggregate query path"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertTrendQueryRequest.cs (new)",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs (new)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs",
+    "AlertService.Common/Enums/Severity.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Maintain the existing controller -> service -> repository layering for aggregate reads.",
+    "Use UTC calendar-day boundaries rather than local time boundaries when building the trailing window.",
+    "Preserve the existing severity ordering convention used by the summary endpoint: Low, Medium, High, Critical.",
+    "Return explicit zero-filled buckets for missing days and missing severities rather than omitting them.",
+    "Use the API's existing model-binding and data-annotation validation path so invalid query values surface as ValidationProblemDetails without custom error-shape drift."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "coverage_goals": [
+    "Cover controller query-validation and HTTP response behavior for default, valid, and invalid days values.",
+    "Cover service mapping of repository trend data into zero-filled day buckets with the expected severity ordering.",
+    "Cover repository aggregation across UTC day boundaries, oldest-first ordering, and zero-result windows."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

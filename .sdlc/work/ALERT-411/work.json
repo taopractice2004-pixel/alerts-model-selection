@@ -1,0 +1,94 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate active alerts during POST creation using a configurable time window and return the existing alert when suppression occurs.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "On POST /api/alerts, if an active alert with the same Title (case-insensitive) and Severity was created within the configured suppression window, do not create a new row and instead return the existing alert."
+    },
+    {
+      "id": "AC2",
+      "text": "When duplicate suppression occurs, return 200 OK with the existing alert and response header X-Duplicate-Suppressed: true."
+    },
+    {
+      "id": "AC3",
+      "text": "A genuinely new alert still returns 201 Created, and suppression must not occur across different severities or when the prior matching alert is inactive."
+    },
+    {
+      "id": "AC4",
+      "text": "The suppression window must be configurable from appsettings.json rather than hardcoded, with the story's baseline value set to 15 minutes."
+    }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts",
+    "AlertsController.Create",
+    "AlertManagementService.CreateAsync",
+    "IAlertRepository.AddAsync",
+    "AlertRepository alert creation query path"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.DTO/Requests/CreateAlertRequest.cs",
+    "AlertService.Models/Alert.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Maintain the existing controller -> service -> repository layering.",
+    "Match duplicate titles case-insensitively but only within the same severity.",
+    "Suppress only when the prior matching alert is active and inside the configured window.",
+    "Do not hardcode the suppression window; source it from configuration.",
+    "Preserve the existing create contract for non-suppressed alerts: 201 Created with CreatedAtRoute."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "coverage_goals": [
+    "Cover controller status code and header behavior for suppressed versus newly created alerts.",
+    "Cover service orchestration for duplicate detection, suppression decisions, and configurable window usage.",
+    "Cover repository duplicate lookup rules for active state, title case-insensitivity, severity matching, and time-window boundaries."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

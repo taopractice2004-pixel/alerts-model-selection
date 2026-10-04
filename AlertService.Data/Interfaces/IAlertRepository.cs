@@ -21,14 +21,43 @@ public interface IAlertRepository
         int pageSize = 20,
         CancellationToken cancellationToken = default);
 
+    Task<(IReadOnlyList<Alert> Items, int TotalCount)> GetAllAsync(
+        bool? isActive,
+        Severity? severity,
+        DateTime? createdFrom,
+        DateTime? createdTo,
+        string? search,
+        string? tag,
+        string sortBy = "createdDate",
+        string sortDirection = "desc",
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default);
+
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<(DateTime DateUtc, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>> GetDailyTrendsAsync(
+        DateTime createdFromUtcInclusive,
+        DateTime createdToUtcExclusive,
+        CancellationToken cancellationToken = default);
+
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<Alert?> FindActiveDuplicateAsync(
+        string title,
+        Severity severity,
+        DateTime createdFromUtc,
+        DateTime createdToUtc,
+        CancellationToken cancellationToken = default);
 
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task<AlertTagMutationResult> AddTagsAsync(int alertId, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
+
+    Task<AlertTagMutationResult> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default);
 }
