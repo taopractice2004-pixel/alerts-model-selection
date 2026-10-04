@@ -1,0 +1,96 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Alert volume trend endpoint: GET /api/alerts/trends?days=N (default 7, 1-90) returns one UTC-day bucket per day for the last N days (oldest first) with total count and per-severity counts, zero-filled; invalid days -> 400 ValidationProblemDetails",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "GET /api/alerts/trends returns 200 with one bucket per UTC calendar day for the last N days, ordered oldest first (the last bucket is the current UTC day)." },
+    { "id": "AC2", "text": "Each bucket contains the UTC date, a total count of alerts created that day, and a count per severity (Low, Medium, High, Critical)." },
+    { "id": "AC3", "text": "Days with no alerts, and severities with no alerts on a day, are returned with a count of 0 (no missing buckets or severity entries)." },
+    { "id": "AC4", "text": "When 'days' is omitted, it defaults to 7 and 7 buckets are returned." },
+    { "id": "AC5", "text": "'days' accepts values 1 through 90 inclusive; 1 and 90 are valid." },
+    { "id": "AC6", "text": "'days' below 1 or above 90 (e.g. 0, -1, 91) returns 400 with ValidationProblemDetails, the same shape as other query validation failures." },
+    { "id": "AC7", "text": "A non-numeric 'days' (e.g. 'abc') returns 400 with ValidationProblemDetails." },
+    { "id": "AC8", "text": "Severity counts reuse the summary endpoint's severity convention (AlertSeverityCountsResponse: Low, Medium, High, Critical, in Severity enum order), and each bucket's total equals the sum of its severity counts." },
+    { "id": "AC9", "text": "Alerts are bucketed by their UTC CreatedDate; alerts created outside the N-day window (before the first day's 00:00 UTC) are not counted." }
+  ],
+  "scope_anchors": [
+    "GET /api/alerts/trends -> AlertsController (new action GetTrends, route 'trends' next to 'summary')",
+    "IAlertService / AlertManagementService (new GetTrendsAsync; mirrors GetSummaryAsync)",
+    "IAlertRepository / AlertRepository (new daily-by-severity count query; mirrors GetSummaryAsync)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs ([Range] + AlertConstants pattern to mirror for 'days' validation)",
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs (reused per-bucket severity counts)"
+  ],
+  "exact_source_files": [
+    "AlertService.Common/Constants/AlertConstants.cs (add DefaultTrendDays=7, MinTrendDays=1, MaxTrendDays=90)",
+    "AlertService.DTO/Requests/AlertTrendsQueryRequest.cs (new; Days with [Range(Min,Max)] and default)",
+    "AlertService.DTO/Responses/AlertTrendsResponse.cs (new; Days + Buckets list)",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs (new; Date, TotalCount, SeverityCounts)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Common/Enums/Severity.cs (Low=1..Critical=4; enum order is the ordering convention)",
+    "AlertService.API/Program.cs (AddControllers + JsonStringEnumConverter; [ApiController] auto-400 gives ValidationProblemDetails; TimeProvider already registered for ALERT-411; no change expected)",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs (CreatedDate is datetime2, no index; no change in this story)",
+    "README.md (API contract table near the summary endpoint; update only if /implement-story documents the endpoint)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Layering: controller -> IAlertService (DTOs only) -> IAlertRepository; service must not reference EF Core. Bucket generation/zero-filling and 'today' (via injected TimeProvider, never DateTime.UtcNow) live in the service; repository only returns grouped counts.",
+    "Validation: bind 'days' through a [FromQuery] request DTO with [Range(AlertConstants.MinTrendDays, AlertConstants.MaxTrendDays)] and default AlertConstants.DefaultTrendDays, matching AlertQueryRequest; [ApiController] then yields 400 ValidationProblemDetails for out-of-range and non-numeric input. No hardcoded 7/1/90 literals; add [ProducesResponseType] 200 + 400 (ValidationProblemDetails) and an XML summary.",
+    "Window: first bucket start = UTC today 00:00 minus (N-1) days; repository filters CreatedDate >= windowStart (and < start of tomorrow UTC) so future-dated rows are excluded. CreatedDate is stored as UTC datetime2.",
+    "Repository query must be a single parameterized EF GroupBy (no raw SQL, no loading all alerts into memory) that translates on both SQL Server and the SQLite/InMemory test providers; group by date parts or CreatedDate.Date + Severity with AsNoTracking and return plain tuples/records (Date, Severity, Count) like GetSummaryAsync.",
+    "Response bucket date serialized as an ISO date (DateOnly or UTC date string); severity counts via the existing AlertSeverityCountsResponse; counts as int.",
+    "No schema change or migration in this story; the unindexed CreatedDate range scan is a known limitation (max 90 days).",
+    "Route 'trends' is a literal segment and does not conflict with '{id:int}'.",
+    "Adding members to IAlertService / IAlertRepository does not break existing Moq-based tests (no hand-written implementations found); /implement-story builds only the API project."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests",
+    "dotnet test AlertService.Data.SQL.Tests"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage of AC1-AC9: service zero-fill, oldest-first ordering, window bounds with a fixed TimeProvider, default 7, days 1 and 90; request validation for 0/-1/91 (Validator.TryValidateObject, as existing AlertQueryRequest tests do); repository grouping by UTC day and severity, exclusion of rows outside the window."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "Assumed 'last N days' includes the current (partial) UTC day as the final bucket, so N buckets end today. Confirm.",
+    "Assumed response shape { days, buckets: [{ date, totalCount, severityCounts: { low, medium, high, critical } }] }; story does not fix the JSON contract. Confirm.",
+    "Assumed all alerts count (active and inactive), since the story filters only by creation date. Confirm.",
+    "Non-numeric 'days' relies on [ApiController] model-binding failure producing 400 ValidationProblemDetails; /unit-testing can only prove range validation at unit level, so the non-numeric case (AC7) may be NOT_VERIFIABLE without an integration test (out of pipeline scope)."
+  ]
+}

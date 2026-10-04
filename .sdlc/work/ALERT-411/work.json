@@ -1,0 +1,98 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Duplicate alert suppression: POST /api/alerts returns 200 + X-Duplicate-Suppressed: true with the existing alert when an active alert with the same Title (case-insensitive) and Severity was created within a configurable window (default 15 min)",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "On POST /api/alerts, if an active alert with the same Title (case-insensitive) and the same Severity was created within the suppression window, no new alert row is created." },
+    { "id": "AC2", "text": "A suppressed request returns 200 OK with the existing alert in the body and the response header 'X-Duplicate-Suppressed: true'." },
+    { "id": "AC3", "text": "A request with no matching recent active alert still creates the alert and returns 201 Created (with Location), without the 'X-Duplicate-Suppressed' header." },
+    { "id": "AC4", "text": "The suppression window (minutes) is read from appsettings.json configuration, not hardcoded; appsettings.json provides the default of 15." },
+    { "id": "AC5", "text": "An alert with the same Title but a different Severity is not suppressed (a new alert is created)." },
+    { "id": "AC6", "text": "A matching alert that is inactive is not treated as a duplicate (a new alert is created)." },
+    { "id": "AC7", "text": "A matching active alert created before the start of the window (older than the configured minutes) is not treated as a duplicate (a new alert is created)." }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts -> AlertsController.Create",
+    "IAlertService.CreateAsync / AlertManagementService.CreateAsync",
+    "IAlertRepository / AlertRepository (new duplicate-lookup method)",
+    "AlertService.API/appsettings.json (new config section)",
+    "AlertService.API/Program.cs (options binding)"
+  ],
+  "exact_source_files": [
+    "AlertService.API/appsettings.json",
+    "AlertService.API/Configuration/AlertSuppressionOptions.cs (new; options class with section name const + DuplicateWindowMinutes)",
+    "AlertService.API/Program.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/CreateAlertResult.cs (new; carries AlertResponse + IsDuplicate)",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Common/Constants/AlertConstants.cs (added DuplicateSuppressedHeader)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs",
+    "AlertService.API.Tests/Configuration/AlertSuppressionOptionsTests.cs (new)"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (ToEntity trims Title; ToResponse used for the existing alert; no change expected)",
+    "AlertService.Common/Constants/AlertConstants.cs (header name / config key / default-minutes constants may be added here)",
+    "AlertService.API/appsettings.Development.json (override only if a dev-specific value is wanted; no change expected)",
+    "AlertService.API.Tests/TestInfrastructure/HealthChecksWebApplicationFactory.cs (boots Program; options binding must not break it)",
+    "README.md (API contract / config section; update only if /implement-story documents the new behavior)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "No hardcoded values: window minutes come from configuration (IOptions<AlertSuppressionOptions>, section e.g. 'AlertSuppression:DuplicateWindowMinutes'); header name and config keys as constants.",
+    "Layering: controller -> IAlertService (DTOs only) -> IAlertRepository; service must not reference EF Core. Duplicate decision lives in the service; repository only exposes a query.",
+    "Title match is case-insensitive and provider-agnostic (tests use InMemory/SQLite, prod uses SQL Server): compare trimmed title via ToLower(), as the existing 'search' filter does. Compare against the same trimmed title that ToEntity would store.",
+    "Window cutoff computed from the injected TimeProvider (UtcNow - window), never DateTime.UtcNow; CreatedDate is stored in UTC.",
+    "Duplicate lookup must be a parameterized EF query (no raw SQL), AsNoTracking not required since the entity is mapped straight to the response; return the most recent match when several exist; include Tags so ToResponse is complete (AlertResponse has Tags).",
+    "Changing IAlertService.CreateAsync's return type and the AlertManagementService constructor breaks existing tests (AlertsControllerTests.Create_*, AlertManagementServiceTests constructor and CreateAsync_*); /unit-testing must update them. /implement-story therefore builds only the API project, not the solution.",
+    "Invalid configuration (window <= 0) must fail closed/safely: validate options at startup (e.g. [Range] + ValidateDataAnnotations/ValidateOnStart) rather than silently suppressing everything.",
+    "Check-then-insert is not atomic; concurrent identical requests can still create two rows. No unique constraint is feasible (time-windowed rule); accepted limitation, no DB schema change / migration for this story.",
+    "Do not log the alert Title/Description beyond what existing code logs (log alert id, severity only)."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests",
+    "dotnet test AlertService.Data.SQL.Tests"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage of AC1-AC7 incl. window boundary (inside vs. just outside), case-insensitive title match, different severity, inactive match, 200+header vs 201 without header, and window read from options (not a constant)."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "Config key/section name not specified: assumed 'AlertSuppression:DuplicateWindowMinutes' with default 15 in appsettings.json. Confirm.",
+    "Should an incoming request with IsActive=false be suppressed by a matching active alert? Assumed yes (rule keys only on the existing alert's state, Title and Severity). Confirm.",
+    "Window boundary: assumed an alert created exactly 15 minutes ago still counts (CreatedDate >= now - window). Confirm.",
+    "Is a window of 0 meant to disable suppression? Assumed options validation requires >= 1 (no disable switch) unless confirmed otherwise."
+  ]
+}

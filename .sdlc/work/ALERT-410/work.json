@@ -1,0 +1,109 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Alert tagging: many-to-many Tag/Alert, add/remove tag endpoints, tag filter on GET /api/alerts, tags in AlertResponse",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "A Tag entity exists with a many-to-many relationship to Alert via a new join table, added by a new EF migration (and reflected in database/02_AlertServiceDb_Migrations.sql)." },
+    { "id": "AC2", "text": "POST /api/alerts/{id}/tags with one or more tags adds them to the alert and returns the updated alert including its tags." },
+    { "id": "AC3", "text": "Tags are de-duplicated case-insensitively (within the request and against tags already on the alert); a tag already on the alert is not added twice." },
+    { "id": "AC4", "text": "An alert can have at most 10 tags; a request that would make the alert exceed 10 tags is rejected and nothing is added." },
+    { "id": "AC5", "text": "Each tag must be 1-30 characters; an empty/whitespace-only or longer-than-30 tag is rejected with 400." },
+    { "id": "AC6", "text": "DELETE /api/alerts/{id}/tags/{tag} removes the tag from the alert." },
+    { "id": "AC7", "text": "DELETE /api/alerts/{id}/tags/{tag} returns 404 when the alert does not exist." },
+    { "id": "AC8", "text": "DELETE /api/alerts/{id}/tags/{tag} returns 404 when the alert exists but the tag is not assigned to it." },
+    { "id": "AC9", "text": "GET /api/alerts accepts an optional 'tag' query parameter and returns only alerts that have that tag." },
+    { "id": "AC10", "text": "The 'tag' filter composes (AND) with the existing isActive, severity, createdFrom/createdTo and search filters, and TotalCount/paging reflect the combined filter." },
+    { "id": "AC11", "text": "AlertResponse includes the alert's tags (on list, get-by-id, create, update, deactivate and tag operations)." }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts/{id}/tags (new)",
+    "DELETE /api/alerts/{id}/tags/{tag} (new)",
+    "GET /api/alerts -> AlertQueryRequest, IAlertRepository.GetAllAsync, AlertRepository.GetAllAsync",
+    "AlertMappingExtensions.ToResponse",
+    "AlertService.Data.SQL/Migrations (new migration)"
+  ],
+  "exact_source_files": [
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.DTO/Requests/AddTagsRequest.cs (new)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs (new; also configures the Alert<->Tag join table, AlertConfiguration unchanged)",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/Migrations/20261004071259_AddAlertTags.cs (new, generated)",
+    "AlertService.Data.SQL/Migrations/20261004071259_AddAlertTags.Designer.cs (new, generated)",
+    "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs (regenerated)",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AddTagsResult.cs (new; service-level 400/404 outcome)",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "database/02_AlertServiceDb_Migrations.sql (regenerated)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Middleware/ExceptionHandlingMiddleware.cs (maps every unhandled exception to 500; tag-limit overflow must not rely on it)",
+    "AlertService.Data.SQL/Extensions/ServiceCollectionExtensions.cs (repository registration; no change expected)",
+    "README.md (API contract section; update only if /implement-story documents the new endpoints)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Input validation at the API boundary: tag 1-30 chars, trimmed, non-whitespace; max 10 tags per alert; 'tag' query param length-bounded (security: validate all input; no raw SQL, EF parameterized queries only).",
+    "Layering: controller -> IAlertService (DTOs only) -> IAlertRepository (Alert/Tag entities); service layer must not reference EF Core.",
+    "Tag matching, de-duplication and filtering are case-insensitive; implement provider-agnostically (tests use InMemory/SQLite, prod uses SQL Server), e.g. ToLower() comparison as in the existing 'search' filter.",
+    "Database: new schema change only via an EF migration (no manual edits of generated migration/snapshot); join table cascades on alert delete; unique index on Tag name.",
+    "Changing IAlertRepository.GetAllAsync's signature breaks existing positional Moq setups in AlertManagementServiceTests (expression trees cannot use optional args); /unit-testing must update those tests. /implement-story therefore builds only the API project (which compiles Data/Data.SQL), not the solution.",
+    "Tag-limit overflow needs a defined 400 outcome from the service layer; no existing mechanism exists (middleware only emits 500)."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests",
+    "dotnet test AlertService.Data.SQL.Tests"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage of AC1-AC11, including 404 paths, limit boundary (10 ok / 11 rejected), 1/30 vs 0/31 char boundaries, and case-insensitive dedupe/filter."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "POST /tags success response: assumed 200 OK with the updated AlertResponse (not 201). Confirm.",
+    "POST body shape: assumed { \"tags\": [\"a\", \"b\"] } (AddTagsRequest with 1-10 items). Confirm.",
+    "Exceeding 10 tags: assumed 400 ValidationProblemDetails (not 409). Confirm.",
+    "POST to a non-existent alert: assumed 404 (not stated in the story).",
+    "Tag already on the alert or duplicate in request: assumed silently ignored (idempotent), counted once toward the 10 limit. Confirm.",
+    "Tags are trimmed; stored with first-seen casing; matching/uniqueness is case-insensitive. Confirm.",
+    "DELETE success response: assumed 204 No Content. Confirm.",
+    "Orphaned Tag rows (no alerts left) are kept, not deleted. Confirm."
+  ]
+}
