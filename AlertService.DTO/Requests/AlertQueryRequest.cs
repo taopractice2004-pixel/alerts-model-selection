@@ -42,5 +42,12 @@ public class AlertQueryRequest : IValidatableObject
                 "CreatedFrom must be less than or equal to CreatedTo.",
                 new[] { nameof(CreatedFrom), nameof(CreatedTo) });
         }
+
+        if (!string.IsNullOrWhiteSpace(Tag) && !System.Text.RegularExpressions.Regex.IsMatch(Tag.Trim(), AlertConstants.TagRouteSafePattern))
+        {
+            yield return new ValidationResult(
+                AlertConstants.TagRouteSafeMessage,
+                new[] { nameof(Tag) });
+        }
     }
 }

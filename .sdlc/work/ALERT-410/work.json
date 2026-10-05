@@ -112,10 +112,10 @@
   "review": {
     "cycle": 1,
     "max_review_cycles": 3,
-    "origin": "l0",
+    "origin": "l1",
     "return_after_testing": false,
     "l0": {
-      "status": "CHANGES_REQUIRED",
+      "status": "STAGE_PASSED",
       "findings": [
         {
           "id": "ALERT-410-L0-F1",
@@ -129,8 +129,18 @@
       ]
     },
     "l1": {
-      "status": "NOT_STARTED",
-      "findings": []
+      "status": "CHANGES_REQUIRED",
+      "findings": [
+        {
+          "id": "ALERT-410-L1-F1",
+          "severity": "MEDIUM",
+          "location": "AlertService.API/Controllers/AlertsController.cs (DELETE /api/alerts/{id}/tags/{tag}), AlertService.DTO/Requests/AddAlertTagsRequest.cs",
+          "description": "The story accepts free-form tags that can include reserved path characters, but tag removal addresses the tag value as a single route segment.",
+          "reason": "`AddAlertTagsRequest` only rejects blank or over-length values, so clients can create tags such as `ops/db`. `DELETE /api/alerts/{id}/tags/{tag}` then uses the raw tag as a path segment, which does not provide a stable way to address delimiter-containing tag values and can leave valid assigned tags without a reliable remove path. That breaks the round-trip contract implied by the free-form tagging requirement.",
+          "suggestion": "Either constrain tag values to a route-safe character set consistently across add/filter/remove flows, or change the removal contract so the tag value is supplied outside the route segment (for example as a query parameter or request body) and add focused tests for delimiter-containing tags.",
+          "status": "RESOLVED"
+        }
+      ]
     }
   },
   "repo_context_fallback_needed": false,

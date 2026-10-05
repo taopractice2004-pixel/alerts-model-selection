@@ -3,6 +3,7 @@ using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.RegularExpressions;
 
 namespace AlertService.API.Controllers;
 
@@ -120,6 +121,12 @@ public class AlertsController : ControllerBase
         if (string.IsNullOrWhiteSpace(tag) || tag.Trim().Length > AlertConstants.TagMaxLength)
         {
             ModelState.AddModelError(nameof(tag), $"Tag values must be between 1 and {AlertConstants.TagMaxLength} characters after trimming.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!Regex.IsMatch(tag.Trim(), AlertConstants.TagRouteSafePattern))
+        {
+            ModelState.AddModelError(nameof(tag), AlertConstants.TagRouteSafeMessage);
             return ValidationProblem(ModelState);
         }
 

@@ -37,6 +37,13 @@ public class AddAlertTagsRequest : IValidatableObject
                     $"Tag values must be between 1 and {AlertConstants.TagMaxLength} characters after trimming.",
                     new[] { nameof(Tags) });
             }
+
+            if (!System.Text.RegularExpressions.Regex.IsMatch(tag.Trim(), AlertConstants.TagRouteSafePattern))
+            {
+                yield return new ValidationResult(
+                    AlertConstants.TagRouteSafeMessage,
+                    new[] { nameof(Tags) });
+            }
         }
     }
 }

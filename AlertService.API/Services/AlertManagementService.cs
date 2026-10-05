@@ -3,6 +3,7 @@ using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using System.Text.RegularExpressions;
 
 namespace AlertService.API.Services;
 
@@ -102,6 +103,14 @@ public class AlertManagementService : IAlertService
             return new AlertTagAddResult
             {
                 ValidationError = "At least one tag is required."
+            };
+        }
+
+        if (normalizedTags.Any(tag => !Regex.IsMatch(tag, AlertConstants.TagRouteSafePattern)))
+        {
+            return new AlertTagAddResult
+            {
+                ValidationError = AlertConstants.TagRouteSafeMessage
             };
         }
 

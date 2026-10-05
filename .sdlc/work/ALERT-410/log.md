@@ -16,8 +16,8 @@ UNIT_TESTING
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | CHANGES_REQUIRED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | CHANGES_REQUIRED |
 
 ## Entries
 
@@ -110,3 +110,51 @@ UNIT_TESTING
 - Loop: 0/3 — TESTS_PASSED
 - Standards notes: Validation stayed scoped to the approved controller, service, and repository test seams.
 - Next recommended command: Update the branch/PR with the current worktree changes, then run /l0-review ALERT-410
+
+### 2026-10-06 — /l0-review ALERT-410 — STAGE_PASSED
+- Summary: Re-reviewed the branch diff against `origin/master` after the unit-testing re-entry. The current reviewable file set is now limited to the approved alert-tagging implementation, tests, and ALERT-410 work-item artifacts; the prior scope finding is resolved in the net diff. No new L0 blocking issues were found in the controller, service, repository, migration, or scoped test changes.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Changed-files source: `git diff --name-only origin/master...HEAD`
+- Build: Reused recorded `/unit-testing` build-through-test result
+- Unit tests: Reused recorded `/unit-testing` result (`48/48` API tests passed; `31/31` repository tests passed)
+- Findings: None
+- Review: Prior finding `ALERT-410-L0-F1` remains RESOLVED; L0 review passed
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: The reviewable diff now stays within the story's approved implementation, test, and work-item artifact slice.
+- Next recommended command: /l1-review ALERT-410
+
+### 2026-10-06 — /l1-review ALERT-410 — CHANGES_REQUIRED
+- Summary: L1 review confirmed the branch diff remains within the approved alert-tagging slice and the scoped diagnostics/tests stay clean, but found one contract gap in the new delete-tag API. The implementation accepts free-form tags that can include reserved path characters, while tag removal addresses the tag value as a single route segment.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Changed-files source: `git diff --name-only origin/master...HEAD`
+- Build: Reused recorded `/unit-testing` build-through-test result
+- Unit tests: Reused recorded `/unit-testing` result (`48/48` API tests passed; `31/31` repository tests passed)
+- Findings: `ALERT-410-L1-F1 (MEDIUM)`
+- Review: `ALERT-410-L1-F1` added as OPEN in `work.json` → `review.l1.findings`
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: The add, filter, and remove tag contracts should agree on what tag shapes are supported so every valid tag value has a reliable remove path.
+- Next recommended command: /address-review-comments ALERT-410 l1
+
+### 2026-10-06 — /address-review-comments ALERT-410 l1 — STAGE_PASSED
+- Summary: Constrained alert tag values to a route-safe character set so add, filter, and delete flows agree on which tags are supported. The fix rejects path-reserved characters at the DTO, controller, and service boundaries and adds focused tests for the resolved L1 finding.
+- Files changed: `AlertService.Common/Constants/AlertConstants.cs`, `AlertService.DTO/Requests/AddAlertTagsRequest.cs`, `AlertService.DTO/Requests/AlertQueryRequest.cs`, `AlertService.API/Controllers/AlertsController.cs`, `AlertService.API/Services/AlertManagementService.cs`, `AlertService.API.Tests/Controllers/AlertsControllerTests.cs`, `AlertService.API.Tests/Services/AlertManagementServiceTests.cs`, `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Resolved findings: `ALERT-410-L1-F1`
+- Build: Implicit through `dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter "FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests"` → SUCCEEDED
+- Unit tests: `dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter "FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests"` → 51/51 passed
+- Review: `ALERT-410-L1-F1` marked RESOLVED; review re-entry set to `/unit-testing`
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Kept the fix at the input and service boundaries so unsupported tag shapes are rejected before persistence and the delete route remains reliable for every accepted tag value.
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-06 — /unit-testing ALERT-410 current_story — STAGE_PASSED
+- Summary: Reran the scoped API and repository unit suites after resolving the L1 contract issue. The route-safe tag validation change passes cleanly across controller, service, and repository seams, so the story is ready for branch/PR update and L1 re-review.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Build: Implicit through `dotnet test` for the scoped test projects → SUCCEEDED
+- Unit tests: `dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter "FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests"` → 51/51 passed; `dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter "FullyQualifiedName~AlertRepositoryTests"` → 31/31 passed
+- Acceptance criteria: AC1 MET; AC2 MET; AC3 MET; AC4 MET; AC5 MET
+- Coverage: NOT_CONFIGURED
+- Bugs: None
+- Review: L1 finding remains RESOLVED in `work.json`; review re-entry through testing is complete
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Validation stayed scoped to the approved controller, service, and repository seams while covering the new route-safe tag contract.
+- Next recommended command: Update the branch/PR with the current worktree changes, then run /l1-review ALERT-410

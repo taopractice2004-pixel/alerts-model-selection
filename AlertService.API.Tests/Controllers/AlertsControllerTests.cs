@@ -124,6 +124,23 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public void AlertQueryRequest_WithReservedPathCharacterInTag_FailsValidation()
+    {
+        var request = new AlertQueryRequest
+        {
+            Tag = "ops/db"
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
     public void AddAlertTagsRequest_WithInvalidTags_FailsValidation()
     {
         var request = new AddAlertTagsRequest
@@ -131,7 +148,8 @@ public class AlertsControllerTests
             Tags = new List<string>
             {
                 "   ",
-                new string('x', 31)
+                new string('x', 31),
+                "ops/db"
             }
         };
 
@@ -141,7 +159,7 @@ public class AlertsControllerTests
         var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
 
         Assert.False(isValid);
-        Assert.Equal(2, results.Count(r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags))));
+        Assert.Equal(3, results.Count(r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags))));
     }
 
     [Theory]
@@ -387,6 +405,7 @@ public class AlertsControllerTests
     [InlineData(" ")]
     [InlineData("   ")]
     [InlineData("1234567890123456789012345678901")]
+    [InlineData("ops/db")]
     public async Task DeleteTag_WithInvalidTag_ReturnsValidationProblem(string tag)
     {
         var result = await _controller.DeleteTag(1, tag, CancellationToken.None);

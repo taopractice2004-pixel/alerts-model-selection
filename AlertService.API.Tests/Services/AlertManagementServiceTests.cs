@@ -110,6 +110,20 @@ public class AlertManagementServiceTests
     }
 
     [Fact]
+    public async Task AddTagsAsync_WhenTagContainsReservedPathCharacter_ReturnsValidationError()
+    {
+        var result = await _service.AddTagsAsync(1, new AddAlertTagsRequest
+        {
+            Tags = new List<string> { "ops/db" }
+        });
+
+        Assert.Equal(AlertService.Common.Constants.AlertConstants.TagRouteSafeMessage, result.ValidationError);
+        Assert.False(result.AlertNotFound);
+        _repository.Verify(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<Alert>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task AddTagsAsync_WhenAlertMissing_ReturnsNotFoundResult()
     {
         _repository.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync((Alert?)null);
