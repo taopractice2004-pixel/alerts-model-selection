@@ -16,6 +16,4 @@ public static class AlertConstants
     public const string NonWhitespacePattern = @"^[\s\S]*\S[\s\S]*$";
     public const int TitleMaxLength = 200;
     public const int DescriptionMaxLength = 1000;
-    public const int TagMaxLength = 30;
-    public const int MaxTagsPerAlert = 10;
 }

@@ -16,11 +16,7 @@ public static class AlertMappingExtensions
         Description = alert.Description,
         Severity = alert.Severity,
         CreatedDate = alert.CreatedDate,
-        IsActive = alert.IsActive,
-        Tags = alert.Tags
-            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(t => t.Name)
-            .ToList()
+        IsActive = alert.IsActive
     };
 
     public static Alert ToEntity(this CreateAlertRequest request, DateTime createdDateUtc) => new()

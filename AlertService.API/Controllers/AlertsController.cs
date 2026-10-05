@@ -1,6 +1,4 @@
-using System.ComponentModel.DataAnnotations;
 using AlertService.API.Services;
-using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -77,38 +75,6 @@ public class AlertsController : ControllerBase
     {
         var deactivated = await _alertService.DeactivateAsync(id, cancellationToken);
         return deactivated is null ? NotFound() : Ok(deactivated);
-    }
-
-    /// <summary>Adds one or more tags to an alert.</summary>
-    [HttpPost("{id:int}/tags")]
-    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
-    {
-        var (alert, maxTagsExceeded) = await _alertService.AddTagsAsync(id, request.Tags, cancellationToken);
-        if (maxTagsExceeded)
-        {
-            ModelState.AddModelError(nameof(request.Tags), $"An alert can have at most {AlertConstants.MaxTagsPerAlert} tags.");
-            return ValidationProblem(ModelState);
-        }
-
-        return alert is null ? NotFound() : Ok(alert);
-    }
-
-    /// <summary>Removes a tag assignment from an alert.</summary>
-    [HttpDelete("{id:int}/tags/{tag}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RemoveTag(
-        int id,
-        [StringLength(AlertConstants.TagMaxLength, MinimumLength = 1)]
-        [RegularExpression(AlertConstants.NonWhitespacePattern)] string tag,
-        CancellationToken cancellationToken)
-    {
-        var (alertExists, tagRemoved) = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
-        return alertExists && tagRemoved ? NoContent() : NotFound();
     }
 
     /// <summary>Deletes an alert.</summary>
