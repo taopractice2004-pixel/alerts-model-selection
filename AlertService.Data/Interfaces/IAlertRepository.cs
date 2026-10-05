@@ -19,6 +19,7 @@ public interface IAlertRepository
         string sortDirection = "desc",
         int page = 1,
         int pageSize = 20,
+        string? tag = null,
         CancellationToken cancellationToken = default);
 
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
@@ -31,4 +32,11 @@ public interface IAlertRepository
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds the given tag names to an alert, reusing existing tag rows (case-insensitive).</summary>
+    /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
+    Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> if the tag assignment was removed, <c>false</c> if the alert or assignment was not found.</returns>
+    Task<bool> RemoveTagAsync(int alertId, string tagName, CancellationToken cancellationToken = default);
 }
