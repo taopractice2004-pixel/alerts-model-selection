@@ -21,13 +21,14 @@ public class AlertRepository : IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Alert> query = _context.Alerts.AsNoTracking();
+        IQueryable<Alert> query = _context.Alerts.AsNoTracking().Include(a => a.Tags);
 
         if (isActive.HasValue)
         {
@@ -53,6 +54,12 @@ public class AlertRepository : IAlertRepository
         {
             var normalizedSearch = search.Trim().ToLower();
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = Tag.Normalize(tag);
+            query = query.Where(a => a.Tags.Any(t => t.NormalizedName == normalizedTag));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -124,7 +131,7 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts.Include(a => a.Tags).FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -136,13 +143,42 @@ public class AlertRepository : IAlertRepository
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
     {
-        _context.Alerts.Update(alert);
+        // Mark only the alert itself; Update() would also mark every loaded Tag as modified.
+        _context.Entry(alert).State = EntityState.Modified;
         await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default)
     {
         _context.Alerts.Remove(alert);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
+    {
+        var normalizedNames = tagNames.Select(Tag.Normalize).ToList();
+
+        var existingTags = await _context.Tags
+            .Where(t => normalizedNames.Contains(t.NormalizedName))
+            .ToDictionaryAsync(t => t.NormalizedName, cancellationToken);
+
+        foreach (var name in tagNames)
+        {
+            var normalized = Tag.Normalize(name);
+            if (!existingTags.TryGetValue(normalized, out var tag))
+            {
+                tag = new Tag { Name = name.Trim(), NormalizedName = normalized };
+            }
+
+            alert.Tags.Add(tag);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveTagAsync(Alert alert, Tag tag, CancellationToken cancellationToken = default)
+    {
+        alert.Tags.Remove(tag);
         await _context.SaveChangesAsync(cancellationToken);
     }
 }

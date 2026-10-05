@@ -24,4 +24,9 @@ public interface IAlertService
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<AddAlertTagsResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> if the tag was removed, <c>false</c> if the alert or the tag assignment was not found.</returns>
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 }

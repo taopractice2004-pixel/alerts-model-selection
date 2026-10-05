@@ -283,4 +283,118 @@ public class AlertsControllerTests
 
         Assert.IsType<NotFoundResult>(result);
     }
+
+    [Fact]
+    public async Task GetAll_PassesTagFilterToService()
+    {
+        var request = new AlertQueryRequest { Tag = "prod" };
+        _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse());
+
+        _ = await _controller.GetAll(request, CancellationToken.None);
+
+        _service.Verify(s => s.GetAllAsync(It.Is<AlertQueryRequest>(r => r.Tag == "prod"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagLongerThan30_FailsValidation()
+    {
+        var request = new AlertQueryRequest { Tag = new string('x', 31) };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagOf30Characters_PassesValidation()
+    {
+        var request = new AlertQueryRequest { Tag = new string('x', 30) };
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.True(isValid);
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithEmptyTags_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string>() };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithMoreThan100Tags_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest { Tags = Enumerable.Range(0, 101).Select(i => $"t{i}").ToList() };
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.False(isValid);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSuccess_ReturnsOkWithAlertIncludingTags()
+    {
+        var request = new AddAlertTagsRequest { Tags = new() { "prod" } };
+        var response = SampleResponse();
+        response.Tags = new List<string> { "prod" };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddAlertTagsResult.Success(response));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(new[] { "prod" }, Assert.IsType<AlertResponse>(ok.Value).Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new() { "prod" } };
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddAlertTagsResult.NotFound());
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenInvalid_ReturnsBadRequestValidationProblem()
+    {
+        var request = new AddAlertTagsRequest { Tags = new() { new string('x', 31) } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddAlertTagsResult.Invalid("bad tag"));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Equal("bad tag", problem.Errors[nameof(AddAlertTagsRequest.Tags)].Single());
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "prod", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAlertOrTagMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "nope", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(1, "nope", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
 }

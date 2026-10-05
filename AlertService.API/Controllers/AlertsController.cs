@@ -86,4 +86,32 @@ public class AlertsController : ControllerBase
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
+
+    /// <summary>Adds one or more tags to an alert (case-insensitive dedupe, max 10 tags per alert, 1-30 characters each).</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _alertService.AddTagsAsync(id, request, cancellationToken);
+
+        return result.Outcome switch
+        {
+            AddAlertTagsOutcome.NotFound => NotFound(),
+            AddAlertTagsOutcome.Invalid => ValidationProblem(new ValidationProblemDetails(
+                new Dictionary<string, string[]> { [nameof(AddAlertTagsRequest.Tags)] = new[] { result.Error ?? string.Empty } })),
+            _ => Ok(result.Alert)
+        };
+    }
+
+    /// <summary>Removes a tag from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return removed ? NoContent() : NotFound();
+    }
 }

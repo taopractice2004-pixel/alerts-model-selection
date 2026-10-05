@@ -1,0 +1,120 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "empty",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Alert Tagging: operators attach/remove free-form tags on alerts, filter GET /api/alerts by tag, tags returned in AlertResponse.",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "A new Tag entity exists with a many-to-many relationship to Alert, persisted via a new join table and a new EF migration (database/02_AlertServiceDb_Migrations.sql regenerated)." },
+    { "id": "AC2", "text": "POST /api/alerts/{id}/tags accepts one or more tags and adds them to the alert; returns 404 if the alert does not exist." },
+    { "id": "AC3", "text": "POST dedupes tags case-insensitively (within the request and against tags already on the alert); a duplicate does not create a second assignment." },
+    { "id": "AC4", "text": "POST rejects with 400 any tag whose length is not 1-30 characters (after trimming) and any request that would leave the alert with more than 10 tags; nothing is persisted on rejection." },
+    { "id": "AC5", "text": "DELETE /api/alerts/{id}/tags/{tag} removes the tag assignment and returns 204; returns 404 if the alert does not exist or the tag is not assigned to that alert." },
+    { "id": "AC6", "text": "GET /api/alerts accepts an optional 'tag' query parameter and returns only alerts carrying that tag." },
+    { "id": "AC7", "text": "The 'tag' filter composes (AND) with existing filters isActive, severity, createdFrom/createdTo and search, and with paging/sorting/TotalCount." },
+    { "id": "AC8", "text": "AlertResponse includes the alert's tags on every endpoint that returns it (list, get by id, create, update, deactivate, add-tags)." }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts/{id}/tags",
+    "DELETE /api/alerts/{id}/tags/{tag}",
+    "GET /api/alerts ?tag filter (AlertQueryRequest, IAlertRepository.GetAllAsync, AlertRepository.GetAllAsync)",
+    "AlertResponse / AlertMappingExtensions.ToResponse",
+    "Alert entity + new Tag entity + EF configuration/migration"
+  ],
+  "exact_source_files": [
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs (new)",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Migrations/20261005180228_AddAlertTags.cs (+ .Designer.cs, snapshot updated)",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.DTO/Requests/AddAlertTagsRequest.cs (new)",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AddAlertTagsResult.cs (new)",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "database/02_AlertServiceDb_Migrations.sql (regenerated, idempotent)"
+  ],
+  "exact_test_files": [
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs (updated by dotnet ef)",
+    "AlertService.API/Middleware/ExceptionHandlingMiddleware.cs",
+    "AlertService.API/AlertService.API.http",
+    "README.md (API route table)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Scope exceeds the 5-source-file cap deliberately: the story crosses Models, Data.SQL (config, migration), Data, Common, DTO, Service, Controller layers.",
+    "Keep layering Controller -> IAlertService -> IAlertRepository -> AlertDbContext; controller stays HTTP-only, entities never leave the service layer.",
+    "Tag filter and tag add/remove must be parameterized EF queries (no raw SQL / string concatenation); tag path/query values are untrusted input and must be length-validated.",
+    "Tag assignments must be removed when an alert is deleted (cascade on the join table).",
+    "Migration is generated with dotnet-ef (dotnet-tools.json), never hand-edited snapshot; update database/02_AlertServiceDb_Migrations.sql per database standard.",
+    "GET list and GET by id must load tags (Include) to avoid N+1; tag filter must not duplicate alert rows.",
+    "No new third-party dependencies."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.Data.SQL.Tests",
+    "dotnet test AlertService.API.Tests"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Every acceptance criterion AC1-AC8 covered by at least one passing test; tag add/remove/filter branches covered at behavior level."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": { "status": "NOT_STARTED", "findings": [] },
+    "l1": { "status": "NOT_STARTED", "findings": [] }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "HTTP status/body for POST tags on success (assumed 200 with updated AlertResponse) - see plan.md assumptions",
+    "HTTP status when 10-tag limit is exceeded (assumed 400 ProblemDetails/ValidationProblemDetails)",
+    "Tag character set restrictions beyond length 1-30 (assumed none; free-form, trimmed)"
+  ],
+  "unresolved_questions": [
+    "Should tag casing of first-added form be preserved for display (assumed yes) while matching/filtering/deleting is case-insensitive?",
+    "Should orphaned Tag rows (no remaining assignments) be deleted when the last assignment is removed (assumed no; cleanup deferred)?",
+    "Should POST fail entirely or silently skip when every submitted tag already exists on the alert (assumed idempotent 200, no error)?"
+  ]
+}
