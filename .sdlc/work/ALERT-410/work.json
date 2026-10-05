@@ -129,7 +129,7 @@
       ]
     },
     "l1": {
-      "status": "CHANGES_REQUIRED",
+      "status": "STAGE_PASSED",
       "findings": [
         {
           "id": "ALERT-410-L1-F1",
