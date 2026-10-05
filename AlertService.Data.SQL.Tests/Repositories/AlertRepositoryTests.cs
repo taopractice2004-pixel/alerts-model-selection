@@ -463,6 +463,36 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task AddTagsAsync_WhenSameNewTagIsCreatedConcurrently_ReusesItInsteadOfFailing()
+    {
+        var (connection, context) = await CreateSqliteContextAsync();
+        await using var _c = connection;
+        await using var _x = context;
+        var repository = new AlertRepository(context);
+        var alert = await repository.AddAsync(NewAlert());
+        var raced = false;
+        context.SavingChanges += (_, _) =>
+        {
+            if (raced)
+            {
+                return;
+            }
+
+            raced = true;
+            using var other = new AlertDbContext(new DbContextOptionsBuilder<AlertDbContext>().UseSqlite(connection).Options);
+            other.Tags.Add(new Tag { Name = "ops" });
+            other.SaveChanges();
+        };
+
+        await repository.AddTagsAsync(alert, new[] { "ops", "prod" });
+
+        context.ChangeTracker.Clear();
+        var reloaded = await repository.GetByIdAsync(alert.Id);
+        Assert.Equal(new[] { "ops", "prod" }, reloaded!.Tags.Select(t => t.Name).Order().ToArray());
+        Assert.Equal(2, await context.Tags.CountAsync());
+    }
+
+    [Fact]
     public async Task RemoveTagAsync_WhenAssigned_RemovesAssignmentCaseInsensitively_AndKeepsTagEntity()
     {
         var alert = await AddTaggedAlertAsync("Disk", Severity.High, Jan, true, "Prod", "ops");

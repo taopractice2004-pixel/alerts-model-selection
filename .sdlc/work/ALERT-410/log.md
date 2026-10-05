@@ -12,12 +12,12 @@ PR_REVIEW
 |---|---|
 | Story Analysis | STAGE_PASSED |
 | Implementation | STAGE_PASSED |
-| Unit Testing | WAITING_FOR_HUMAN (review-fix revalidation passed) |
+| Unit Testing | WAITING_FOR_HUMAN (review-fix revalidation passed, origin l1) |
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | PASS (F1 resolved; re-review required after PR update) |
-| L1 Review | NOT_STARTED |
+| L0 Review | PASS (re-review after F1 fix) |
+| L1 Review | CHANGES_REQUIRED |
 
 ## Entries
 
@@ -101,3 +101,43 @@ PR_REVIEW
 - Review: return_after_testing true (origin l0, cycle 1/3); developer must update the SAME PR
 - Loop: 0/3 — TESTS_PASSED
 - Next recommended command: /l0-review ALERT-410 — after the PR is updated
+
+### 2026-10-05 — /l0-review (re-review after review fixes) — STAGE_PASSED
+- Summary: Read-only L0 re-review of commit 8e08905 (fix for ALERT-410-L0-F1) on top of 5866774. `UpdateAsync` now uses `Entry(alert).State = Modified`; scope limited to the repository, its regression test and `.sdlc` artifacts; one-line comment, no new dependencies, no security or quality issues; no editor diagnostics. No new findings; F1 stays RESOLVED.
+- Files changed: None (review only) — `work.json` → `review.l0` (PASS confirmed)
+- Build: NOT_RUN (reused /unit-testing result: API 70/70, Data.SQL 50/50)
+- Unit tests: NOT_RUN (reused)
+- Loop: 0/3 — TESTS_PASSED
+- Review: L0 PASS; review.cycle 1/3
+- Next recommended command: /l1-review ALERT-410
+
+### 2026-10-05 — /l1-review — CHANGES_REQUIRED
+- Summary: Read-only L1 engineering/design review against `plan.md` and AC1–AC9. Layering, dependency direction, many-to-many mapping/migration (cascade join, unique `IX_Tags_Name`, `IX_AlertTags_TagId`), filter composition with Count-before-Include, and test strategy are sound. 2 findings: ALERT-410-L1-F1 (MEDIUM) — concurrent creation of the same new tag hits the unique index and returns 500; ALERT-410-L1-F2 (LOW) — unrestricted tag characters vs path-segment DELETE route.
+- Non-blocking notes: tag filter uses `ToLower()` on the column (consistent with existing search; Tags table is small); POST returns 200 (assumption, deviates from the generic 'POST creates → 201' rule) — the seven assumptions in `work.json` → `unresolved_questions` should be confirmed before L2.
+- Files changed: None (review only) — `work.json` → `review.l1`
+- Build: NOT_RUN (reused /unit-testing result)
+- Unit tests: NOT_RUN (reused)
+- Loop: 0/3 — TESTS_PASSED
+- Review: L1 CHANGES_REQUIRED (F1 MEDIUM, F2 LOW); review.cycle 1/3
+- Next recommended command: /address-review-comments ALERT-410 l1
+
+### 2026-10-05 — /address-review-comments (l1) — STAGE_PASSED
+- Summary: ALERT-410-L1-F1 classified IN_SCOPE_TECHNICAL_FIX and resolved: AlertRepository.AddTagsAsync now retries once when the save fails (unique IX_Tags_Name race), after unstaging the added tags and detaching new Tag entries, so a concurrently created tag is reused instead of returning 500. Added SQLite regression test AddTagsAsync_WhenSameNewTagIsCreatedConcurrently_ReusesItInsteadOfFailing (not executed here). ALERT-410-L1-F2 classified NEEDS_HUMAN_CLARIFICATION (tag character policy is unspecified; restricting characters would add a rule beyond AC5) — left OPEN, no code changed for it.
+- Files changed: AlertService.Data.SQL/Repositories/AlertRepository.cs; AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs; .sdlc/work/ALERT-410/work.json
+- Build: dotnet build AlertService.sln → succeeded
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Review: review.l1 stays CHANGES_REQUIRED (F2 open); review.cycle 2/3; return_after_testing true; origin l1
+- Open question: F2 — approve a tag character policy (restrict allowed characters vs. keep any) or route as a scope change via /analyze-story.
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-05 - /unit-testing (review-fix revalidation, origin l1) - WAITING_FOR_HUMAN
+- Summary: Revalidated after the L1-F1 fix. New SQLite test AddTagsAsync_WhenSameNewTagIsCreatedConcurrently_ReusesItInsteadOfFailing ran and passed (cleanup/retry works). No test or production defects; no production code or testability seams changed.
+- Files changed: None (no test edits needed)
+- Build: built implicitly by dotnet test (succeeded)
+- Unit tests: dotnet test AlertService.API.Tests -> 70/70 passed; dotnet test AlertService.Data.SQL.Tests -> 51/51 passed
+- Acceptance criteria: AC1-AC9 MET (unchanged; covered by the passing suites)
+- Coverage: not re-run (only AddTagsAsync retry changed; prior result stands)
+- Bugs: None
+- Review: return_after_testing true (origin l1, cycle 2/3); L1-F2 still OPEN awaiting a human decision on tag character policy; developer must update the SAME PR
+- Loop: 0/3 - TESTS_PASSED
+- Next recommended command: /l0-review ALERT-410 - after the PR is updated

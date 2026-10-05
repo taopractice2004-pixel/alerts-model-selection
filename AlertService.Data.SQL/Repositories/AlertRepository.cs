@@ -140,18 +140,40 @@ public class AlertRepository : IAlertRepository
     public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
     {
         var loweredNames = tagNames.Select(n => n.ToLowerInvariant()).ToList();
-        var existingTags = await _context.Tags
-            .Where(t => loweredNames.Contains(t.Name.ToLower()))
-            .ToListAsync(cancellationToken);
 
-        foreach (var name in tagNames)
+        for (var attempt = 1; ; attempt++)
         {
-            var tag = existingTags.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))
-                ?? new Tag { Name = name };
-            alert.Tags.Add(tag);
-        }
+            var existingTags = await _context.Tags
+                .Where(t => loweredNames.Contains(t.Name.ToLower()))
+                .ToListAsync(cancellationToken);
 
-        await _context.SaveChangesAsync(cancellationToken);
+            var staged = new List<Tag>();
+            foreach (var name in tagNames)
+            {
+                var tag = existingTags.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))
+                    ?? new Tag { Name = name };
+                alert.Tags.Add(tag);
+                staged.Add(tag);
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateException) when (attempt == 1)
+            {
+                // A concurrent request may have created the same new tag (unique IX_Tags_Name); retry once against committed rows.
+                foreach (var tag in staged)
+                {
+                    alert.Tags.Remove(tag);
+                    if (_context.Entry(tag).State == EntityState.Added)
+                    {
+                        _context.Entry(tag).State = EntityState.Detached;
+                    }
+                }
+            }
+        }
     }
 
     public async Task<bool> RemoveTagAsync(Alert alert, string tag, CancellationToken cancellationToken = default)

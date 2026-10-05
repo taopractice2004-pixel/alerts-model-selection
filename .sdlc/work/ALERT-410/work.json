@@ -100,9 +100,9 @@
     "url": ""
   },
   "review": {
-    "cycle": 1,
+    "cycle": 2,
     "max_review_cycles": 3,
-    "origin": "l0",
+    "origin": "l1",
     "return_after_testing": true,
     "l0": {
       "status": "PASS",
@@ -120,7 +120,33 @@
         }
       ]
     },
-    "l1": { "status": "NOT_STARTED", "findings": [] },
+    "l1": {
+      "status": "CHANGES_REQUIRED",
+      "findings": [
+        {
+          "id": "ALERT-410-L1-F1",
+          "severity": "MEDIUM",
+          "location": "AlertService.Data.SQL/Repositories/AlertRepository.cs: AddTagsAsync (select-then-insert on Tags with unique IX_Tags_Name)",
+          "description": "AddTagsAsync looks up existing Tag rows and inserts missing ones in a separate step with no handling of a unique-index violation. Two operators adding the same new tag concurrently (to the same or different alerts) make one request fail with DbUpdateException, surfaced as 500.",
+          "reason": "A valid, idempotent-by-design request (assumption: re-adding a tag is not an error) fails under a realistic race; the data-access design relies on a unique constraint it does not handle. Was recorded as a known gap in /implement-story and /unit-testing but left unresolved.",
+          "suggestion": "In AddTagsAsync catch the unique-key DbUpdateException, detach the failed new Tag entries, re-query the now-existing tags and retry the save once (keeping the repository the only place that knows about EF/SQL errors); add a repository test that simulates the conflict.",
+          "status": "RESOLVED",
+          "classification": "IN_SCOPE_TECHNICAL_FIX",
+          "changed_files": ["AlertService.Data.SQL/Repositories/AlertRepository.cs", "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"]
+        },
+        {
+          "id": "ALERT-410-L1-F2",
+          "severity": "LOW",
+          "location": "AlertService.API/Controllers/AlertsController.cs: RemoveTag ({tag} route segment) vs AlertService.DTO/Requests/AddAlertTagsRequest.cs (length-only validation)",
+          "description": "POST accepts any characters (e.g. '/', '?', '#', '%', '.') but DELETE carries the tag in a URL path segment, so such tags can be added yet may not be reliably removable. Character-set rules are recorded as NOT_SPECIFIED in work.json.",
+          "reason": "API contract inconsistency: a tag the API accepts may become impossible to remove, leaving the alert permanently at the tag limit.",
+          "suggestion": "Decide the tag character policy: either restrict allowed characters in AddAlertTagsRequest validation (e.g. letters, digits, '-', '_', ' ') or verify and document that encoded values round-trip through DELETE, and add a test for the chosen behavior.",
+          "status": "OPEN",
+          "classification": "NEEDS_HUMAN_CLARIFICATION",
+          "clarification_needed": "Which tag character policy applies: restrict allowed characters in AddAlertTagsRequest (new validation rule beyond AC5), or keep any characters and accept that tags with path-reserved characters may not be removable via DELETE? Approve a policy, or confirm it is a scope change for /analyze-story."
+        }
+      ]
+    },
     "l2": { "status": "NOT_STARTED", "comments": [] }
   },
   "repo_context_fallback_needed": false,
@@ -129,12 +155,12 @@
     "Tag character set restrictions (e.g. allowed characters, '/' handling in DELETE route): NOT_SPECIFIED."
   ],
   "unresolved_questions": [
-    "Assumed (confirm): POST /api/alerts/{id}/tags returns 200 OK with the updated AlertResponse (tags are added to an existing alert, not a new top-level resource). Alternative: 201/204.",
-    "Assumed (confirm): a POST whose deduped result would exceed 10 tags is rejected entirely with 400 (no partial add); tags already on the alert do not count as new.",
-    "Assumed (confirm): tags are trimmed before validation; the first-seen casing is stored and displayed; matching (dedupe, GET filter, DELETE) is case-insensitive.",
-    "Assumed (confirm): re-adding a tag already on the alert is idempotent (no error). POST with an empty tags array returns 400.",
-    "Assumed (confirm): tags are shared entities (unique by name) and are not deleted when their last alert assignment is removed (no orphan cleanup in this story).",
-    "Assumed (confirm): the tag filter accepts a single tag value (not a list) and a non-existent tag simply yields an empty page.",
-    "Assumed (confirm): deleting an alert also removes its tag assignments (join rows cascade) but not the Tag rows."
+    "(confirm): POST /api/alerts/{id}/tags returns 200 OK with the updated AlertResponse (tags are added to an existing alert, not a new top-level resource). Alternative: 201/204.",
+    " (confirm): a POST whose deduped result would exceed 10 tags is rejected entirely with 400 (no partial add); tags already on the alert do not count as new.",
+    " (confirm): tags are trimmed before validation; the first-seen casing is stored and displayed; matching (dedupe, GET filter, DELETE) is case-insensitive.",
+    " (confirm): re-adding a tag already on the alert is idempotent (no error). POST with an empty tags array returns 400.",
+    " (confirm): tags are shared entities (unique by name) and are not deleted when their last alert assignment is removed (no orphan cleanup in this story).",
+    " (confirm): the tag filter accepts a single tag value (not a list) and a non-existent tag simply yields an empty page.",
+    " (confirm): deleting an alert also removes its tag assignments (join rows cascade) but not the Tag rows."
   ]
 }
