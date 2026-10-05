@@ -1,0 +1,119 @@
+{
+  "work_type": "{{story | bug | testcase}}",
+  "work_id": "{{STORY_ID | BUG_ID | WORK_ID}}",
+  "work_case": "{{SIMPLE | AMBIGUOUS | STALE_REPLAN | BUGFIX | TESTCASE}}",
+  "relationship_mode": "{{standalone | current_story | existing_work_id | empty}}",
+  "tracker": "{{optional tracker / project or empty}}",
+  "effort_mode": "{{low | standard | deep}}",
+  "repository_mode": "{{EXISTING_PROJECT | NEW_PROJECT}}",
+  "summary": "{{one-line story, bug, or testcase summary}}",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "{{acceptance criterion, expected bug behavior, or behavior to cover}}" }
+  ],
+  "scope_anchors": [
+    "{{suspected file | module | failing test | stack trace location | endpoint | class | function}}"
+  ],
+  "exact_source_files": [
+    "{{path; for files that do not exist yet, append ' (new)'}}"
+  ],
+  "exact_test_files": [
+    "{{path or NOT_AVAILABLE}}"
+  ],
+  "adjacent_dependencies": [
+    "{{path or None}}"
+  ],
+  "selected_standards": [
+    "{{standard id from .sdlc/context/manifest.json standards.items, e.g. coding | backend-dotnet | api-rest | database | service-architecture | frontend-react | ui}}"
+  ],
+  "constraints": [
+    "{{constraint}}"
+  ],
+  "build_commands": [
+    "{{narrowest build / compile / type-check command for the slice, or NOT_CONFIGURED}}"
+  ],
+  "unit_test_commands": [
+    "{{narrowest unit-test command for the slice, or TO_BE_CONFIGURED}}"
+  ],
+  "coverage_commands": [
+    "{{command or NOT_CONFIGURED}}"
+  ],
+  "coverage_goals": [
+    "{{line | branch | function | statement | behavior coverage goal for target scope}}"
+  ],
+  "test_file_strategy": "{{edit_existing_unit_test_file_or_create_new_one}}",
+  "desired_test_layer": "{{unit or empty}}",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "{{NOT_STARTED | TESTS_PASSED | BUGS_OPEN | ESCALATED_TO_DEVELOPER}}",
+    "open_bugs": [
+      {
+        "id": "{{<WORK-ID>-B<n>}}",
+        "acceptance_criterion": "{{AC id or None}}",
+        "failing_test": "{{test name / file}}",
+        "observed": "{{actual behavior or failure message}}",
+        "expected": "{{expected behavior}}",
+        "suspected_file": "{{source path or TO_BE_DISCOVERED}}"
+      }
+    ]
+  },
+  "pr": {
+    "prepared": false,
+    "status": "{{NOT_PREPARED | PREPARED | HUMAN_CREATED}}",
+    "human_created": false,
+    "url": "{{optional manual PR url or empty}}"
+  },
+  "review": {
+    "cycle": 0,
+    "origin": "{{IMPLEMENTATION | l0 | l1 | l2 or empty}}",
+    "return_after_testing": false,
+    "l0": {
+      "status": "{{NOT_STARTED | PASS | CHANGES_REQUIRED}}",
+      "findings": [
+        {
+          "id": "{{<WORK-ID>-L0-F<n>}}",
+          "severity": "{{BLOCKER | HIGH | MEDIUM | LOW}}",
+          "location": "{{file path:line or area}}",
+          "description": "{{short description}}",
+          "reason": "{{why it matters}}",
+          "suggestion": "{{suggested correction}}",
+          "classification": "{{IN_SCOPE_TECHNICAL_FIX | REQUIREMENT_OR_SCOPE_CHANGE | NEEDS_HUMAN_CLARIFICATION or empty}}",
+          "status": "{{OPEN | RESOLVED | DEFERRED}}"
+        }
+      ]
+    },
+    "l1": {
+      "status": "{{NOT_STARTED | PASS | CHANGES_REQUIRED}}",
+      "findings": [
+        {
+          "id": "{{<WORK-ID>-L1-F<n>}}",
+          "severity": "{{BLOCKER | HIGH | MEDIUM | LOW}}",
+          "location": "{{file path:line or area}}",
+          "description": "{{short description}}",
+          "reason": "{{why it matters}}",
+          "suggestion": "{{suggested correction}}",
+          "classification": "{{IN_SCOPE_TECHNICAL_FIX | REQUIREMENT_OR_SCOPE_CHANGE | NEEDS_HUMAN_CLARIFICATION or empty}}",
+          "status": "{{OPEN | RESOLVED | DEFERRED}}"
+        }
+      ]
+    },
+    "l2": {
+      "status": "{{NOT_STARTED | COMMENTS | APPROVED}}",
+      "comments": [
+        {
+          "id": "{{<WORK-ID>-L2-C<n>}}",
+          "text": "{{client review comment as provided by the developer}}",
+          "classification": "{{IN_SCOPE_TECHNICAL_FIX | REQUIREMENT_OR_SCOPE_CHANGE | NEEDS_HUMAN_CLARIFICATION or empty}}",
+          "status": "{{OPEN | RESOLVED | DEFERRED}}"
+        }
+      ]
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "{{fact missing from local work cache or empty}}"
+  ],
+  "unresolved_questions": [
+    "{{question or empty}}"
+  ]
+}
