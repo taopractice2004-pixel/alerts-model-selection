@@ -121,11 +121,11 @@
     "origin": "",
     "return_after_testing": false,
     "l0": {
-      "status": "NOT_STARTED",
+      "status": "PASS",
       "findings": []
     },
     "l1": {
-      "status": "NOT_STARTED",
+      "status": "PASS",
       "findings": []
     }
   },

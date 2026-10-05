@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+L1_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -16,8 +16,8 @@ PREPARE_PR
 | Bug Fix | NOT_STARTED |
 | Test -> Fix Loop | 0/3 - TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | STAGE_PASSED |
 
 ## Entries
 
@@ -75,3 +75,22 @@ PREPARE_PR
 - Loop: 0/3
 - Human action required: Review `pr.md`, then manually create or update the pull request.
 - Next recommended command: /l0-review ALERT-410
+
+### 2026-10-05T18:36:04Z - /l0-review ALERT-410 - STAGE_PASSED
+- Summary: Completed code-level L0 review for scoped story files; no findings requiring code changes.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Review scope: Scope discipline, coding/repository standards, code quality, security, and configured static/code-level checks (reused prior stage results).
+- Findings: None
+- Review status: L0 PASS
+- Loop: 0/3 (unchanged)
+- Next recommended command: /l1-review ALERT-410
+
+### 2026-10-05T18:43:02Z - /l1-review ALERT-410 - STAGE_PASSED
+- Summary: Completed engineering/design-level L1 review for scoped story files; no findings requiring changes.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Review scope: Requirement semantics, architecture placement, design/maintainability, API/data/config implications, and test strategy quality.
+- Findings: None
+- Review status: L1 PASS
+- Loop: 0/3 (unchanged)
+- Human action required: Proceed with remaining human-only steps outside this pipeline.
+- Next recommended command: None - review complete
