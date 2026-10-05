@@ -1,4 +1,5 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -26,7 +27,7 @@ public class AlertManagementService : IAlertService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var (alerts, totalCount) = await _repository.GetAllAsync(
+        var (alerts, totalCount) = await _repository.GetAllWithTagAsync(
             request.IsActive,
             request.Severity,
             request.CreatedFrom,
@@ -36,6 +37,7 @@ public class AlertManagementService : IAlertService
             request.SortDirection,
             request.Page,
             request.PageSize,
+            request.Tag,
             cancellationToken);
 
         return new PagedResponse<AlertResponse>
@@ -50,7 +52,7 @@ public class AlertManagementService : IAlertService
 
     public async Task<AlertResponse?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        var alert = await _repository.GetByIdWithTagsAsync(id, cancellationToken);
         if (alert is null)
         {
             _logger.LogWarning("Alert {AlertId} not found", id);
@@ -94,7 +96,7 @@ public class AlertManagementService : IAlertService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        var alert = await _repository.GetByIdWithTagsAsync(id, cancellationToken);
         if (alert is null)
         {
             _logger.LogWarning("Cannot update alert {AlertId}: not found", id);
@@ -110,7 +112,7 @@ public class AlertManagementService : IAlertService
 
     public async Task<AlertResponse?> DeactivateAsync(int id, CancellationToken cancellationToken = default)
     {
-        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        var alert = await _repository.GetByIdWithTagsAsync(id, cancellationToken);
         if (alert is null)
         {
             _logger.LogWarning("Cannot deactivate alert {AlertId}: not found", id);
@@ -129,9 +131,64 @@ public class AlertManagementService : IAlertService
         return alert.ToResponse();
     }
 
+    public async Task<(AlertResponse? Alert, bool MaxTagsExceeded)> AddTagsAsync(int id, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+
+        var normalizedTags = tags
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var alert = await _repository.GetByIdWithTagsAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return (null, false);
+        }
+
+        var existingNormalized = alert.Tags
+            .Select(t => t.NormalizedName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var tagsToAdd = normalizedTags
+            .Where(t => !existingNormalized.Contains(t.ToUpperInvariant()))
+            .ToList();
+
+        if (alert.Tags.Count + tagsToAdd.Count > AlertConstants.MaxTagsPerAlert)
+        {
+            return (null, true);
+        }
+
+        var updated = await _repository.AddTagsAsync(alert, tagsToAdd, cancellationToken);
+
+        _logger.LogInformation("Added {TagCount} tag(s) to alert {AlertId}", tagsToAdd.Count, id);
+        return (updated.ToResponse(), false);
+    }
+
+    public async Task<(bool AlertExists, bool TagRemoved)> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _repository.GetByIdWithTagsAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot remove tag from alert {AlertId}: not found", id);
+            return (false, false);
+        }
+
+        var removed = await _repository.RemoveTagAsync(alert, tag, cancellationToken);
+        if (!removed)
+        {
+            return (true, false);
+        }
+
+        _logger.LogInformation("Removed tag {Tag} from alert {AlertId}", tag, id);
+        return (true, true);
+    }
+
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
-        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        var alert = await _repository.GetByIdAsync(id, cancellationToken: cancellationToken);
         if (alert is null)
         {
             _logger.LogWarning("Cannot delete alert {AlertId}: not found", id);

@@ -35,7 +35,8 @@ public class AlertsControllerTests
         Description = "85% used",
         Severity = Severity.High,
         CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-        IsActive = true
+        IsActive = true,
+        Tags = ["Ops"]
     };
 
     [Fact]
@@ -66,7 +67,8 @@ public class AlertsControllerTests
             PageSize = 10,
             SortBy = "title",
             SortDirection = "asc",
-            Search = "disk"
+            Search = "disk",
+            Tag = "ops"
         };
         _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse(SampleResponse(1)));
 
@@ -117,6 +119,43 @@ public class AlertsControllerTests
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.SortBy)));
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.SortDirection)));
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Search)));
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData("\t")]
+    public void AlertQueryRequest_WithWhitespaceTag_FailsValidation(string tag)
+    {
+        var request = new AlertQueryRequest
+        {
+            Tag = tag
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagLongerThanMax_FailsValidation()
+    {
+        var request = new AlertQueryRequest
+        {
+            Tag = new string('x', 31)
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
     }
 
     [Theory]
@@ -282,5 +321,122 @@ public class AlertsControllerTests
         var result = await _controller.Delete(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenMaxTagsExceeded_ReturnsValidationProblem()
+    {
+        var request = new AddAlertTagsRequest { Tags = ["ops", "infra"] };
+        _service
+            .Setup(s => s.AddTagsAsync(1, request.Tags, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((null, true));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var details = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.True(objectResult.StatusCode is null or 400);
+        Assert.True(details.Errors.ContainsKey(nameof(request.Tags)));
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = ["ops"] };
+        _service
+            .Setup(s => s.AddTagsAsync(99, request.Tags, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((null, false));
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSuccessful_ReturnsOkWithTags()
+    {
+        var request = new AddAlertTagsRequest { Tags = ["ops"] };
+        var response = SampleResponse();
+        response.Tags = ["Ops", "PagerDuty"];
+
+        _service
+            .Setup(s => s.AddTagsAsync(1, request.Tags, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((response, false));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(["Ops", "PagerDuty"], body.Tags);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service
+            .Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((true, true));
+
+        var result = await _controller.RemoveTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAlertMissing_ReturnsNotFound()
+    {
+        _service
+            .Setup(s => s.RemoveTagAsync(99, "ops", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((false, false));
+
+        var result = await _controller.RemoveTag(99, "ops", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAssignmentMissing_ReturnsNotFound()
+    {
+        _service
+            .Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((true, false));
+
+        var result = await _controller.RemoveTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithWhitespaceTag_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest
+        {
+            Tags = ["ops", "   "]
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithTagLongerThanMax_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest
+        {
+            Tags = [new string('x', 31)]
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
     }
 }

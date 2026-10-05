@@ -21,10 +21,29 @@ public interface IAlertRepository
         int pageSize = 20,
         CancellationToken cancellationToken = default);
 
+    Task<(IReadOnlyList<Alert> Items, int TotalCount)> GetAllWithTagAsync(
+        bool? isActive = null,
+        Severity? severity = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        string? search = null,
+        string sortBy = "createdDate",
+        string sortDirection = "desc",
+        int page = 1,
+        int pageSize = 20,
+        string? tag = null,
+        CancellationToken cancellationToken = default);
+
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
         CancellationToken cancellationToken = default);
 
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<Alert?> GetByIdWithTagsAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<Alert> AddTagsAsync(Alert alert, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(Alert alert, string tag, CancellationToken cancellationToken = default);
 
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
 

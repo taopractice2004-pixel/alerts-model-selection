@@ -58,6 +58,10 @@ the user for them.
   finding (and `review.<source>.status` = `CHANGES_REQUIRED`). If there are none, STOP with
   `BLOCKED_MISSING_INFORMATION` and recommend the appropriate next review command.
 
+- **Loop limit guard:** if `work.json` → `review.cycle` ≥ `review.max_review_cycles` (3), do not
+  fix anything. STOP with `WAITING_FOR_HUMAN`, summarize the still-open findings/comments, and
+  recommend `None — escalated to developer`. Only a human may reset `review.cycle` to 0.
+
 ## Shared Rules
 Follow the shared pipeline rules in `.github/copilot-instructions.md` (Read Order, Context
 Rules, Effort Dial, Stage Outputs, Story Flow and Test → Fix Loop, Repository Modes,

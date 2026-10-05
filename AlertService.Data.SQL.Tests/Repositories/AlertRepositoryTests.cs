@@ -214,6 +214,31 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAllWithTagAsync_ComposesTagWithExistingFilters()
+    {
+        var opsMatch = await _repository.AddAsync(NewAlert("Disk in range", Severity.Critical, new DateTime(2026, 2, 25, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var wrongTag = await _repository.AddAsync(NewAlert("Disk in range wrong tag", Severity.Critical, new DateTime(2026, 2, 24, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var wrongSeverity = await _repository.AddAsync(NewAlert("Disk in range wrong severity", Severity.High, new DateTime(2026, 2, 23, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        await _repository.AddTagsAsync(opsMatch, ["ops"]);
+        await _repository.AddTagsAsync(wrongTag, ["infra"]);
+        await _repository.AddTagsAsync(wrongSeverity, ["ops"]);
+
+        var result = await _repository.GetAllWithTagAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            createdTo: new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
+            search: "disk",
+            tag: " OPS ");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Disk in range", result.Items[0].Title);
+        Assert.Equal("ops", Assert.Single(result.Items[0].Tags).Name);
+    }
+
+    [Fact]
     public async Task GetAllAsync_WithCreatedRangeThatMatchesNothing_ReturnsEmptyResult()
     {
         await _repository.AddAsync(NewAlert("Older alert", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
@@ -329,6 +354,65 @@ public class AlertRepositoryTests : IDisposable
         var result = await _repository.GetByIdAsync(999);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetByIdWithTagsAsync_WhenExists_ReturnsAlertWithTags()
+    {
+        var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
+        await _repository.AddTagsAsync(added, ["ops", "infra"]);
+
+        var result = await _repository.GetByIdWithTagsAsync(added.Id);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.Tags.Count);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_CreatesAndReusesTagsAcrossAlerts()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+
+        await _repository.AddTagsAsync(first, ["ops", "infra"]);
+        await _repository.AddTagsAsync(second, ["ops"]);
+
+        _context.ChangeTracker.Clear();
+        var firstReloaded = await _context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == first.Id);
+        var secondReloaded = await _context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == second.Id);
+
+        Assert.Equal(2, firstReloaded.Tags.Count);
+        Assert.Single(secondReloaded.Tags);
+        Assert.Equal(2, await _context.Tags.CountAsync());
+        Assert.Equal("OPS", await _context.Tags.Where(t => t.Name == "ops").Select(t => t.NormalizedName).SingleAsync());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenMissing_ReturnsFalse()
+    {
+        var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
+
+        var removed = await _repository.RemoveTagAsync(added, "ops");
+
+        Assert.False(removed);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenExists_UnassignsTag()
+    {
+        var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
+        await _repository.AddTagsAsync(added, ["ops", "infra"]);
+
+        var loaded = await _repository.GetByIdWithTagsAsync(added.Id);
+        Assert.NotNull(loaded);
+
+        var removed = await _repository.RemoveTagAsync(loaded!, " OPS ");
+
+        Assert.True(removed);
+        _context.ChangeTracker.Clear();
+        var reloaded = await _context.Alerts.Include(a => a.Tags).SingleAsync(a => a.Id == added.Id);
+        Assert.Single(reloaded.Tags);
+        Assert.Equal("infra", reloaded.Tags.Single().Name);
     }
 
     [Fact]

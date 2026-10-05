@@ -65,6 +65,7 @@
   },
   "review": {
     "cycle": 0,
+    "max_review_cycles": 3,
     "origin": "{{IMPLEMENTATION | l0 | l1 | l2 or empty}}",
     "return_after_testing": false,
     "l0": {

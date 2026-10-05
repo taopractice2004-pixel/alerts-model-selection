@@ -22,6 +22,12 @@ public interface IAlertService
     /// <returns>The deactivated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> DeactivateAsync(int id, CancellationToken cancellationToken = default);
 
+    /// <returns>The updated alert and a flag indicating whether the operation exceeded max tags.</returns>
+    Task<(AlertResponse? Alert, bool MaxTagsExceeded)> AddTagsAsync(int id, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
+
+    /// <returns>A tuple of alert existence and tag removal state.</returns>
+    Task<(bool AlertExists, bool TagRemoved)> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
+
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
 }

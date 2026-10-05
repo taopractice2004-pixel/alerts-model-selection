@@ -126,7 +126,7 @@ STATUS: CHANGES_REQUIRED
 FILES CREATED/UPDATED: work.json, log.md
 SUMMARY: <n> L0 findings recorded (<by severity>); details in work.json → review.l0.findings
 HUMAN ACTION: None
-NEXT RECOMMENDED COMMAND: /address-review-comments <ID> l0
+NEXT RECOMMENDED COMMAND: /address-review-comments <ID> l0   (if review.cycle = review.max_review_cycles (3): None — escalated to developer, STATUS WAITING_FOR_HUMAN)
 ```
 
 Missing PR / cache:
