@@ -38,10 +38,5 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .IsRequired();
 
         builder.HasIndex(a => a.IsActive);
-
-        // Many-to-many to Tag via an explicit join table.
-        builder.HasMany(a => a.Tags)
-            .WithMany(t => t.Alerts)
-            .UsingEntity(join => join.ToTable("AlertTags"));
     }
 }

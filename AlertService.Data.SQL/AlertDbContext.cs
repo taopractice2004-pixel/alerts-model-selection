@@ -12,8 +12,6 @@ public class AlertDbContext : DbContext
 
     public DbSet<Alert> Alerts => Set<Alert>();
 
-    public DbSet<Tag> Tags => Set<Tag>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AlertDbContext).Assembly);

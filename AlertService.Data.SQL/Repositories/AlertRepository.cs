@@ -25,10 +25,9 @@ public class AlertRepository : IAlertRepository
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
-        string? tag = null,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Alert> query = _context.Alerts.AsNoTracking().Include(a => a.Tags);
+        IQueryable<Alert> query = _context.Alerts.AsNoTracking();
 
         if (isActive.HasValue)
         {
@@ -54,12 +53,6 @@ public class AlertRepository : IAlertRepository
         {
             var normalizedSearch = search.Trim().ToLower();
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
-        }
-
-        if (!string.IsNullOrWhiteSpace(tag))
-        {
-            var normalizedTag = tag.Trim();
-            query = query.Where(a => a.Tags.Any(t => t.Name == normalizedTag));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -131,7 +124,7 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.Include(a => a.Tags).FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -151,53 +144,5 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
-    {
-        var alert = await _context.Alerts
-            .Include(a => a.Tags)
-            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
-
-        if (alert is null)
-        {
-            return null;
-        }
-
-        foreach (var name in tagNames)
-        {
-            if (alert.Tags.Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
-            var existing = await _context.Tags.FirstOrDefaultAsync(t => t.Name == name, cancellationToken);
-            alert.Tags.Add(existing ?? new Tag { Name = name });
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return alert;
-    }
-
-    public async Task<bool> RemoveTagAsync(int alertId, string tagName, CancellationToken cancellationToken = default)
-    {
-        var alert = await _context.Alerts
-            .Include(a => a.Tags)
-            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
-
-        if (alert is null)
-        {
-            return false;
-        }
-
-        var tag = alert.Tags.FirstOrDefault(t => string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
-        if (tag is null)
-        {
-            return false;
-        }
-
-        alert.Tags.Remove(tag);
-        await _context.SaveChangesAsync(cancellationToken);
-        return true;
     }
 }

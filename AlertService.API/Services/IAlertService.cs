@@ -3,14 +3,6 @@ using AlertService.DTO.Responses;
 
 namespace AlertService.API.Services;
 
-/// <summary>Outcome of an add-tags operation, mapped to an HTTP status by the controller.</summary>
-public enum AddTagsStatus
-{
-    Success,
-    AlertNotFound,
-    TagLimitExceeded
-}
-
 /// <summary>
 /// Business operations for alerts. Returns DTOs so controllers never see entities.
 /// </summary>
@@ -32,10 +24,4 @@ public interface IAlertService
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
-
-    /// <summary>Adds one or more tags to an alert, deduping case-insensitively and enforcing the per-alert tag limit.</summary>
-    Task<(AddTagsStatus Status, AlertResponse? Alert)> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default);
-
-    /// <returns><c>true</c> if the tag assignment was removed, <c>false</c> if the alert or assignment was not found.</returns>
-    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 }
