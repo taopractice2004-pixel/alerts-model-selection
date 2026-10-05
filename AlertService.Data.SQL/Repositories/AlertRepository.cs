@@ -158,22 +158,55 @@ public class AlertRepository : IAlertRepository
     {
         var normalizedNames = tagNames.Select(Tag.Normalize).ToList();
 
-        var existingTags = await _context.Tags
-            .Where(t => normalizedNames.Contains(t.NormalizedName))
-            .ToDictionaryAsync(t => t.NormalizedName, cancellationToken);
-
-        foreach (var name in tagNames)
+        // A concurrent writer can win the unique NormalizedName / join key race; retry once against fresh state.
+        for (var attempt = 0; ; attempt++)
         {
-            var normalized = Tag.Normalize(name);
-            if (!existingTags.TryGetValue(normalized, out var tag))
+            var existingTags = await _context.Tags
+                .Where(t => normalizedNames.Contains(t.NormalizedName))
+                .ToDictionaryAsync(t => t.NormalizedName, cancellationToken);
+
+            var staged = new List<Tag>();
+            foreach (var name in tagNames)
             {
-                tag = new Tag { Name = name.Trim(), NormalizedName = normalized };
+                var normalized = Tag.Normalize(name);
+                if (alert.Tags.Any(t => t.NormalizedName == normalized))
+                {
+                    continue;
+                }
+
+                if (!existingTags.TryGetValue(normalized, out var tag))
+                {
+                    tag = new Tag { Name = name.Trim(), NormalizedName = normalized };
+                }
+
+                alert.Tags.Add(tag);
+                staged.Add(tag);
             }
 
-            alert.Tags.Add(tag);
-        }
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateException) when (attempt == 0)
+            {
+                foreach (var tag in staged)
+                {
+                    alert.Tags.Remove(tag);
+                }
 
-        await _context.SaveChangesAsync(cancellationToken);
+                // Includes the Added AlertTags join entries, which survive alert.Tags.Remove.
+                foreach (var entry in _context.ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList())
+                {
+                    entry.State = EntityState.Detached;
+                }
+
+                // LoadAsync is a no-op while IsLoaded is true, so reset it to pick up the concurrent writer's rows.
+                var tagsEntry = _context.Entry(alert).Collection(a => a.Tags);
+                tagsEntry.IsLoaded = false;
+                await tagsEntry.LoadAsync(cancellationToken);
+            }
+        }
     }
 
     public async Task RemoveTagAsync(Alert alert, Tag tag, CancellationToken cancellationToken = default)

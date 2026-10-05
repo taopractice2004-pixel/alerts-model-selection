@@ -1,4 +1,4 @@
-# Log — ALERT-410
+﻿# Log — ALERT-410
 
 > Workflow state plus one entry per stage run. Update the status header in place and append a
 > new entry at the bottom — never rewrite earlier entries. Work type, case, effort mode, files,
@@ -12,12 +12,12 @@ PR_REVIEW
 |---|---|
 | Story Analysis | STAGE_PASSED |
 | Implementation | STAGE_PASSED |
-| Unit Testing | STAGE_PASSED |
-| Bug Fix | NOT_STARTED |
-| Test → Fix Loop | 0/3 — TESTS_PASSED |
+| Unit Testing | WAITING_FOR_HUMAN |
+| Bug Fix | STAGE_PASSED |
+| Test → Fix Loop | 2/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | CHANGES_REQUIRED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | CHANGES_REQUIRED |
 
 ## Entries
 
@@ -99,5 +99,81 @@ PR_REVIEW
 - Bugs: None
 - Review: review.return_after_testing remains true; review.cycle 1/3
 - Loop: 0/3 - TESTS_PASSED
+- Standards notes: No production code changed; no testability seams added
+- Next recommended command: /l0-review ALERT-410 - after the developer updates the SAME PR
+
+### 2026-10-06 - /l0-review - STAGE_PASSED
+- Summary: Re-review of the story's source/test files after review fixes. Scope matches work.json; RemoveTagAsync now bounds the route tag (F1 verified, regression test present); README/.http updated (F2 verified); parameterized EF queries, no secrets, no new dependencies, no code-level issues.
+- Findings: None (ALERT-410-L0-F1 and F2 from the earlier round are resolved and the list was replaced)
+- Files changed: work.json (review.l0), log.md (no source/test changes)
+- Build/Unit tests/Coverage: reused from the latest /unit-testing entry (44 + 76 passed); not re-run
+- Loop: 0/3 - TESTS_PASSED (unchanged); review.cycle 1/3
+- Next recommended command: /l1-review ALERT-410
+
+### 2026-10-06 - /l1-review - CHANGES_REQUIRED
+- Summary: Engineering/design review against plan.md and AC1-AC8. Requirement fit, layering (controller -> service -> repository), API contract, schema/migration design and test strategy are sound; one write-path robustness gap found.
+- Findings: ALERT-410-L1-F1 (MEDIUM, AddTagsAsync does not handle unique-index / join-key conflicts from concurrent requests, yielding 500 instead of idempotent success)
+- Files changed: work.json (review.l1), log.md (no source/test changes)
+- Build/Unit tests/Coverage: reused from the latest /unit-testing entry (44 + 76 passed); not re-run
+- Loop: 0/3 - TESTS_PASSED (unchanged); review.cycle 1/3
+- Deferred: Human confirmation of POST status code, limit-exceeded status, orphan-tag cleanup
+- Next recommended command: /address-review-comments ALERT-410 l1
+
+### 2026-10-06 - /address-review-comments (l1) - STAGE_PASSED
+- Summary: Resolved ALERT-410-L1-F1: AddTagsAsync now retries once on DbUpdateException (rolls back staged tags, detaches added Tag entities, reloads alert tags, re-queries by NormalizedName) and skips tags already on the alert.
+- Files changed: AlertService.Data.SQL/Repositories/AlertRepository.cs, work.json, log.md
+- Build: dotnet build AlertService.API/AlertService.API.csproj -> succeeded (0 warnings, 0 errors)
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Loop: 0/3 - TESTS_PASSED (unchanged); review.cycle 2/3
+- Deferred: Repository test for the conflict/retry path (to be added in /unit-testing)
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-06 - /unit-testing - STAGE_FAILED
+- Summary: Review-fix revalidation (origin l1). Added 3 SQLite shared-connection repository tests for the AddTagsAsync conflict/retry path (SaveChanges interceptor simulates the concurrent writer).
+- Files changed: AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs, work.json, log.md
+- Unit tests: dotnet test AlertService.Data.SQL.Tests -> 46 passed, 1 failed; dotnet test AlertService.API.Tests -> 76 passed
+- Acceptance criteria: AC1-AC8 MET at the original behavior; L1-F1 fix NOT verified (see bug)
+- Coverage: not re-run
+- Bugs: ALERT-410-B1 - retry after a join-key (AlertTags) conflict still fails: the Added join entity survives alert.Tags.Remove and the reload, so the second SaveChanges throws the same DbUpdateException. New-tag unique-index conflict retry passes; persistent-failure propagation passes.
+- Loop: 0/3 - BUGS_OPEN; review.return_after_testing remains true
+- Standards notes: No production code changed; no testability seams added
+- Next recommended command: /fix-bugs ALERT-410 current_story
+
+### 2026-10-06 - /fix-bugs - STAGE_PASSED
+- Summary: Fixed ALERT-410-B1. Root cause: the AddTagsAsync retry detached only Added Tag entries; the Added AlertTags join entry (shared-type entity) stayed tracked and was re-inserted by the second SaveChanges. Retry now detaches every Added entry before reloading alert.Tags.
+- Files changed: AlertService.Data.SQL/Repositories/AlertRepository.cs
+- Build: dotnet build AlertService.API/AlertService.API.csproj -> succeeded (0 warnings, 0 errors)
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Loop: 1/3 - fix applied, pending retest
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-06 - /unit-testing - STAGE_FAILED
+- Summary: Retest after fix 1 (review-fix revalidation, origin l1). No test changes; a temporary debug test was added and removed.
+- Files changed: work.json, log.md (no test file changes remain)
+- Unit tests: dotnet test AlertService.Data.SQL.Tests -> 46 passed, 1 failed; dotnet test AlertService.API.Tests -> 76 passed
+- Acceptance criteria: AC1-AC8 MET at the original behavior; L1-F1 fix still NOT verified
+- Coverage: not re-run
+- Bugs: ALERT-410-B1 still open. Fix 1 removed the stale Added join entry, but the reload in the catch block is a no-op: Collection(a => a.Tags).LoadAsync() skips because the collection is already IsLoaded (alert came from GetByIdAsync with Include(Tags)). alert.Tags stays empty, so the retry re-adds the tag a concurrent writer already assigned and re-inserts the duplicate join row. Fix: set IsLoaded = false before LoadAsync (or load via Collection(...).Query()).
+- Loop: 1/3 - BUGS_OPEN; review.return_after_testing remains true
+- Standards notes: No production code changed; no testability seams added
+- Next recommended command: /fix-bugs ALERT-410 current_story
+
+### 2026-10-06 - /fix-bugs - STAGE_PASSED
+- Summary: Fixed ALERT-410-B1 (fix iteration 2, effort escalated to standard). Root cause: Collection(a => a.Tags).LoadAsync() in the AddTagsAsync retry is a no-op while the collection IsLoaded (alert arrives via Include(Tags)), so alert.Tags stayed empty and the retry re-inserted the join row a concurrent writer had already created. The retry now sets IsLoaded = false before LoadAsync (detach-Added-entries step from fix 1 kept).
+- Files changed: AlertService.Data.SQL/Repositories/AlertRepository.cs, work.json, log.md
+- Build: dotnet build AlertService.API/AlertService.API.csproj -> succeeded (0 warnings, 0 errors)
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Loop: 2/3 - fix applied, pending retest
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-06 - /unit-testing - WAITING_FOR_HUMAN
+- Summary: Retest after fix 2 (review-fix revalidation, origin l1). No test or production changes. The retry-path regression test for ALERT-410-B1 now passes, verifying the ALERT-410-L1-F1 fix.
+- Files changed: work.json, log.md (no test file changes)
+- Unit tests: dotnet test AlertService.Data.SQL.Tests -> 47 passed; dotnet test AlertService.API.Tests -> 76 passed; 0 failed
+- Acceptance criteria: AC1-AC8 MET
+- Coverage: not re-run (previous: service/controller/mapping 100%; Data.SQL NOT_CONFIGURED)
+- Bugs: None (ALERT-410-B1 fixed and verified)
+- Review: review.return_after_testing remains true; review.cycle 2/3
+- Loop: 2/3 - TESTS_PASSED
 - Standards notes: No production code changed; no testability seams added
 - Next recommended command: /l0-review ALERT-410 - after the developer updates the SAME PR

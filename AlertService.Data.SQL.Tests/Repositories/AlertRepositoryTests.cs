@@ -3,6 +3,7 @@ using AlertService.Data.SQL.Repositories;
 using AlertService.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace AlertService.Data.SQL.Tests.Repositories;
 
@@ -630,5 +631,108 @@ public class AlertRepositoryTests : IDisposable
 
         Assert.Equal(1, result.TotalCount);
         Assert.Equal("Tagged", result.Items.Single().Title);
+    }
+
+    private sealed class SavingInterceptor : SaveChangesInterceptor
+    {
+        private readonly Func<int, Task> _onSaving;
+        private int _calls;
+
+        public SavingInterceptor(Func<int, Task> onSaving) => _onSaving = onSaving;
+
+        public int Calls => _calls;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            await _onSaving(_calls++);
+            return result;
+        }
+    }
+
+    private static async Task<SqliteConnection> CreateSharedSqliteAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var setup = CreateSharedContext(connection);
+        await setup.Database.EnsureCreatedAsync();
+        return connection;
+    }
+
+    private static AlertDbContext CreateSharedContext(SqliteConnection connection, params IInterceptor[] interceptors) =>
+        new(new DbContextOptionsBuilder<AlertDbContext>().UseSqlite(connection).AddInterceptors(interceptors).Options);
+
+    [Fact]
+    public async Task AddTagsAsync_WhenConcurrentWriterInsertsSameNewTag_RetriesAndReusesWinningTag()
+    {
+        await using var connection = await CreateSharedSqliteAsync();
+        await using var seed = CreateSharedContext(connection);
+        var alertId = (await new AlertRepository(seed).AddAsync(NewAlert())).Id;
+        await using var writer = CreateSharedContext(connection);
+        var interceptor = new SavingInterceptor(async call =>
+        {
+            if (call == 0)
+            {
+                writer.Tags.Add(new Tag { Name = "Prod", NormalizedName = "prod" });
+                await writer.SaveChangesAsync();
+            }
+        });
+        await using var context = CreateSharedContext(connection, interceptor);
+        var repository = new AlertRepository(context);
+        var alert = (await repository.GetByIdAsync(alertId))!;
+
+        await repository.AddTagsAsync(alert, new[] { "prod" });
+
+        await using var verify = CreateSharedContext(connection);
+        Assert.Equal(1, await verify.Tags.CountAsync());
+        var reloaded = await verify.Alerts.Include(a => a.Tags).SingleAsync();
+        Assert.Equal("Prod", reloaded.Tags.Single().Name);
+        Assert.Equal(2, interceptor.Calls);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenConcurrentWriterAssignsSameTagToAlert_RetryIsIdempotent()
+    {
+        await using var connection = await CreateSharedSqliteAsync();
+        await using var seed = CreateSharedContext(connection);
+        var alertId = (await new AlertRepository(seed).AddAsync(NewAlert())).Id;
+        seed.Tags.Add(new Tag { Name = "prod", NormalizedName = "prod" });
+        await seed.SaveChangesAsync();
+        await using var writer = CreateSharedContext(connection);
+        var interceptor = new SavingInterceptor(async call =>
+        {
+            if (call == 0)
+            {
+                var writerRepository = new AlertRepository(writer);
+                await writerRepository.AddTagsAsync((await writerRepository.GetByIdAsync(alertId))!, new[] { "prod" });
+            }
+        });
+        await using var context = CreateSharedContext(connection, interceptor);
+        var repository = new AlertRepository(context);
+        var alert = (await repository.GetByIdAsync(alertId))!;
+
+        await repository.AddTagsAsync(alert, new[] { "prod" });
+
+        await using var verify = CreateSharedContext(connection);
+        var reloaded = await verify.Alerts.Include(a => a.Tags).SingleAsync();
+        Assert.Equal("prod", reloaded.Tags.Single().Name);
+        Assert.Equal(1, await verify.Tags.CountAsync());
+        Assert.Equal("prod", alert.Tags.Single().Name);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenConflictPersistsAfterRetry_PropagatesDbUpdateException()
+    {
+        await using var connection = await CreateSharedSqliteAsync();
+        await using var seed = CreateSharedContext(connection);
+        var alertId = (await new AlertRepository(seed).AddAsync(NewAlert())).Id;
+        var interceptor = new SavingInterceptor(_ => throw new DbUpdateException("conflict"));
+        await using var context = CreateSharedContext(connection, interceptor);
+        var repository = new AlertRepository(context);
+        var alert = (await repository.GetByIdAsync(alertId))!;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => repository.AddTagsAsync(alert, new[] { "prod" }));
+
+        Assert.Equal(2, interceptor.Calls);
     }
 }

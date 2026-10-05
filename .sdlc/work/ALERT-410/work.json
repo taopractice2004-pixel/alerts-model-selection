@@ -4,7 +4,7 @@
   "work_case": "AMBIGUOUS",
   "relationship_mode": "empty",
   "tracker": "ALERT",
-  "effort_mode": "low",
+  "effort_mode": "standard",
   "repository_mode": "EXISTING_PROJECT",
   "summary": "Alert Tagging: operators attach/remove free-form tags on alerts, filter GET /api/alerts by tag, tags returned in AlertResponse.",
   "acceptance_criteria": [
@@ -88,9 +88,17 @@
   "desired_test_layer": "unit",
   "test_fix_loop": {
     "max_fix_iterations": 3,
-    "fix_iteration": 0,
+    "fix_iteration": 2,
     "status": "TESTS_PASSED",
-    "open_bugs": []
+    "open_bugs": [],
+    "fixed_bugs": [
+      {
+        "id": "ALERT-410-B1",
+        "ac": "AC3",
+        "regression_test": "AlertRepositoryTests.AddTagsAsync_WhenConcurrentWriterAssignsSameTagToAlert_RetryIsIdempotent",
+        "fix": "AddTagsAsync retry detaches all Added entries and resets Collection(a => a.Tags).IsLoaded = false before LoadAsync so the concurrent writer's join row is seen (fix iterations 1-2); verified by retest"
+      }
+    ]
   },
   "pr": {
     "prepared": true,
@@ -99,34 +107,28 @@
     "url": ""
   },
   "review": {
-    "cycle": 1,
+    "cycle": 2,
     "max_review_cycles": 3,
-    "origin": "l0",
+    "origin": "l1",
     "return_after_testing": true,
     "l0": {
+      "status": "PASS",
+      "findings": []
+    },
+    "l1": {
       "status": "CHANGES_REQUIRED",
       "findings": [
         {
-          "id": "ALERT-410-L0-F1",
-          "severity": "MEDIUM",
-          "location": "AlertService.API/Services/AlertManagementService.cs RemoveTagAsync; AlertService.API/Controllers/AlertsController.cs RemoveTag",
-          "description": "The {tag} route value of DELETE /api/alerts/{id}/tags/{tag} is not length-validated; it is trimmed and lower-cased at any length before lookup.",
-          "reason": "work.json constraints require tag path/query values to be length-validated as untrusted input; the GET ?tag query is bounded by [StringLength] but the route value is not.",
-          "suggestion": "In RemoveTagAsync, return false when the trimmed tag is empty or longer than AlertConstants.TagMaxLength (a tag that long cannot be assigned), and add a test.",
-          "status": "RESOLVED"
-        },
-        {
-          "id": "ALERT-410-L0-F2",
-          "severity": "LOW",
-          "location": "README.md (route table, ~lines 46-52); AlertService.API/AlertService.API.http",
-          "description": "New endpoints POST /api/alerts/{id}/tags, DELETE /api/alerts/{id}/tags/{tag} and the GET ?tag filter are not documented in the README route/query tables or the .http sample file.",
-          "reason": "Both files are recorded as adjacent dependencies in work.json and currently list every other endpoint; leaving them stale makes the docs inconsistent with the API.",
-          "suggestion": "Add the two routes (200/400/404 and 204/404) and the 'tag' query parameter to the README, and sample requests to the .http file.",
+          "id": "ALERT-410-L1-F1",
+          "severity": "Medium",
+          "location": "AlertService.Data.SQL/Repositories/AlertRepository.cs:AddTagsAsync (consumed by AlertManagementService.AddTagsAsync)",
+          "description": "AddTagsAsync does a read-then-insert of Tag rows by NormalizedName with no handling of the unique-index (Tags.NormalizedName) or AlertTags composite-key conflict. Two concurrent POSTs that introduce the same new tag (or add the same tag to the same alert) make SaveChanges throw DbUpdateException, which surfaces as a generic 500 via ExceptionHandlingMiddleware.",
+          "reason": "The unique NormalizedName index is the designed guard for case-insensitive dedupe (AC3), but the write path does not cooperate with it. Concurrent operators tagging alerts with a common new tag (e.g. 'prod') is a realistic scenario, and the API would return 500 for a valid request instead of the idempotent 200 the plan assumes.",
+          "suggestion": "In AddTagsAsync, catch DbUpdateException from SaveChangesAsync, detach the failed new Tag/alert-tag entries, re-query existing tags by NormalizedName and retry once (or treat the conflict as already-present), keeping the operation idempotent. Add a repository test that simulates the conflict (e.g. pre-insert the Tag via a second context between the lookup and save, or assert the retry path).",
           "status": "RESOLVED"
         }
       ]
-    },
-    "l1": { "status": "NOT_STARTED", "findings": [] }
+    }
   },
   "repo_context_fallback_needed": false,
   "missing_facts": [
