@@ -25,7 +25,6 @@ public class AlertRepository : IAlertRepository
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
-        string? tag = null,
         CancellationToken cancellationToken = default)
     {
         IQueryable<Alert> query = _context.Alerts.AsNoTracking();
@@ -56,17 +55,10 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
         }
 
-        if (!string.IsNullOrWhiteSpace(tag))
-        {
-            var normalizedTag = tag.Trim().ToLower();
-            query = query.Where(a => a.Tags.Any(t => t.Name.ToLower() == normalizedTag));
-        }
-
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
-            .Include(a => a.Tags)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -132,61 +124,7 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts
-            .Include(a => a.Tags)
-            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
-    }
-
-    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
-    {
-        var loweredNames = tagNames.Select(n => n.ToLowerInvariant()).ToList();
-
-        for (var attempt = 1; ; attempt++)
-        {
-            var existingTags = await _context.Tags
-                .Where(t => loweredNames.Contains(t.Name.ToLower()))
-                .ToListAsync(cancellationToken);
-
-            var staged = new List<Tag>();
-            foreach (var name in tagNames)
-            {
-                var tag = existingTags.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))
-                    ?? new Tag { Name = name };
-                alert.Tags.Add(tag);
-                staged.Add(tag);
-            }
-
-            try
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-                return;
-            }
-            catch (DbUpdateException) when (attempt == 1)
-            {
-                // A concurrent request may have created the same new tag (unique IX_Tags_Name); retry once against committed rows.
-                foreach (var tag in staged)
-                {
-                    alert.Tags.Remove(tag);
-                    if (_context.Entry(tag).State == EntityState.Added)
-                    {
-                        _context.Entry(tag).State = EntityState.Detached;
-                    }
-                }
-            }
-        }
-    }
-
-    public async Task<bool> RemoveTagAsync(Alert alert, string tag, CancellationToken cancellationToken = default)
-    {
-        var assigned = alert.Tags.FirstOrDefault(t => string.Equals(t.Name, tag, StringComparison.OrdinalIgnoreCase));
-        if (assigned is null)
-        {
-            return false;
-        }
-
-        alert.Tags.Remove(assigned);
-        await _context.SaveChangesAsync(cancellationToken);
-        return true;
+        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -198,8 +136,7 @@ public class AlertRepository : IAlertRepository
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
     {
-        // Entry() avoids Update() marking the loaded shared Tag rows as Modified.
-        _context.Entry(alert).State = EntityState.Modified;
+        _context.Alerts.Update(alert);
         await _context.SaveChangesAsync(cancellationToken);
     }
 

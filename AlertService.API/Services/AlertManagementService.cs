@@ -1,5 +1,4 @@
 using AlertService.API.Mappings;
-using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -37,7 +36,6 @@ public class AlertManagementService : IAlertService
             request.SortDirection,
             request.Page,
             request.PageSize,
-            request.Tag,
             cancellationToken);
 
         return new PagedResponse<AlertResponse>
@@ -143,62 +141,6 @@ public class AlertManagementService : IAlertService
         await _repository.DeleteAsync(alert, cancellationToken);
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
-        return true;
-    }
-
-    public async Task<AddAlertTagsResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var alert = await _repository.GetByIdAsync(id, cancellationToken);
-        if (alert is null)
-        {
-            _logger.LogWarning("Cannot tag alert {AlertId}: not found", id);
-            return new AddAlertTagsResult(AddAlertTagsStatus.AlertNotFound);
-        }
-
-        var existing = new HashSet<string>(alert.Tags.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
-        var newTags = new List<string>();
-        foreach (var name in request.Tags.Select(t => t.Trim()))
-        {
-            if (existing.Add(name))
-            {
-                newTags.Add(name);
-            }
-        }
-
-        if (alert.Tags.Count + newTags.Count > AlertConstants.MaxTagsPerAlert)
-        {
-            _logger.LogWarning("Cannot tag alert {AlertId}: would exceed {MaxTags} tags", id, AlertConstants.MaxTagsPerAlert);
-            return new AddAlertTagsResult(AddAlertTagsStatus.TooManyTags);
-        }
-
-        if (newTags.Count > 0)
-        {
-            await _repository.AddTagsAsync(alert, newTags, cancellationToken);
-            _logger.LogInformation("Added {TagCount} tag(s) to alert {AlertId}", newTags.Count, id);
-        }
-
-        return new AddAlertTagsResult(AddAlertTagsStatus.Success, alert.ToResponse());
-    }
-
-    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
-    {
-        var alert = await _repository.GetByIdAsync(id, cancellationToken);
-        if (alert is null)
-        {
-            _logger.LogWarning("Cannot remove tag from alert {AlertId}: not found", id);
-            return false;
-        }
-
-        var removed = await _repository.RemoveTagAsync(alert, tag.Trim(), cancellationToken);
-        if (!removed)
-        {
-            _logger.LogWarning("Cannot remove tag from alert {AlertId}: tag not assigned", id);
-            return false;
-        }
-
-        _logger.LogInformation("Removed tag from alert {AlertId}", id);
         return true;
     }
 }

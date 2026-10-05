@@ -18,6 +18,4 @@ public class Alert
     public DateTime CreatedDate { get; set; }
 
     public bool IsActive { get; set; }
-
-    public List<Tag> Tags { get; set; } = new();
 }
