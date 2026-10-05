@@ -77,6 +77,33 @@ public class AlertsController : ControllerBase
         return deactivated is null ? NotFound() : Ok(deactivated);
     }
 
+    /// <summary>Adds one or more tags to an existing alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var (alert, validationError) = await _alertService.AddTagsAsync(id, request.Tags, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(validationError))
+        {
+            ModelState.AddModelError(nameof(request.Tags), validationError);
+            return ValidationProblem(ModelState);
+        }
+
+        return alert is null ? NotFound() : Ok(alert);
+    }
+
+    /// <summary>Removes a tag assignment from an existing alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return removed ? NoContent() : NotFound();
+    }
+
     /// <summary>Deletes an alert.</summary>
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

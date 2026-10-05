@@ -35,7 +35,8 @@ public class AlertsControllerTests
         Description = "85% used",
         Severity = Severity.High,
         CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-        IsActive = true
+        IsActive = true,
+        Tags = new[] { "ops", "prod" }
     };
 
     [Fact]
@@ -280,6 +281,65 @@ public class AlertsControllerTests
         _service.Setup(s => s.DeleteAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await _controller.Delete(99, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenServiceReturnsValidationError_ReturnsValidationProblem()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops" } };
+        _service.Setup(s => s.AddTagsAsync(1, request.Tags, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((null, "Each tag must be between 1 and 30 characters."));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.IsType<ValidationProblemDetails>(problem.Value);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops" } };
+        _service.Setup(s => s.AddTagsAsync(123, request.Tags, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((null, (string?)null));
+
+        var result = await _controller.AddTags(123, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSuccessful_ReturnsOkWithTags()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops", "prod" } };
+        _service.Setup(s => s.AddTagsAsync(1, request.Tags, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SampleResponse(1), (string?)null));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "ops", "prod" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenMissingAssignment_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(1, "ops", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }

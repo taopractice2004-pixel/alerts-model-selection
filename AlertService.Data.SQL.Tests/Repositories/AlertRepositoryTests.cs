@@ -355,4 +355,87 @@ public class AlertRepositoryTests : IDisposable
 
         Assert.False(await _context.Alerts.AnyAsync());
     }
+
+    [Fact]
+    public async Task AddTagsAsync_AddsDistinctCaseInsensitiveTags_AndReturnsUpdatedAlert()
+    {
+        var alert = await _repository.AddAsync(NewAlert("Tagged alert"));
+
+        var updated = await _repository.AddTagsAsync(alert.Id, new[] { "ops", "OPS", " prod " });
+
+        Assert.NotNull(updated);
+        Assert.Equal(2, updated!.AlertTags.Count);
+        Assert.Equal(new[] { "ops", "prod" }, updated.AlertTags.Select(current => current.Tag.Name).OrderBy(name => name).ToArray());
+        Assert.Equal(2, await _context.Tags.CountAsync());
+        Assert.Equal(2, await _context.AlertTags.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_ReusesExistingTagEntitiesAcrossAlerts()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+
+        await _repository.AddTagsAsync(first.Id, new[] { "ops" });
+        await _repository.AddTagsAsync(second.Id, new[] { "OPS" });
+
+        Assert.Equal(1, await _context.Tags.CountAsync());
+        Assert.Equal(2, await _context.AlertTags.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAssigned_RemovesAssignmentAndReturnsTrue()
+    {
+        var alert = await _repository.AddAsync(NewAlert("Tagged alert"));
+        await _repository.AddTagsAsync(alert.Id, new[] { "ops", "prod" });
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, " OPS ");
+
+        Assert.True(removed);
+        var refreshed = await _repository.GetByIdAsync(alert.Id);
+        Assert.NotNull(refreshed);
+        Assert.Single(refreshed!.AlertTags);
+        Assert.Equal("prod", refreshed.AlertTags.Single().Tag.Name);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenNotAssigned_ReturnsFalse()
+    {
+        var alert = await _repository.AddAsync(NewAlert("Tagged alert"));
+        await _repository.AddTagsAsync(alert.Id, new[] { "ops" });
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, "missing");
+
+        Assert.False(removed);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_ComposesWithExistingFilters()
+    {
+        var one = await _repository.AddAsync(NewAlert("Disk ops active", Severity.Critical, new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var two = await _repository.AddAsync(NewAlert("Disk ops inactive", Severity.Critical, new DateTime(2026, 2, 11, 0, 0, 0, DateTimeKind.Utc), isActive: false));
+        var three = await _repository.AddAsync(NewAlert("Disk prod active", Severity.Critical, new DateTime(2026, 2, 12, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var four = await _repository.AddAsync(NewAlert("CPU ops active", Severity.Critical, new DateTime(2026, 2, 13, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        await _repository.AddTagsAsync(one.Id, new[] { "ops" });
+        await _repository.AddTagsAsync(two.Id, new[] { "ops" });
+        await _repository.AddTagsAsync(three.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(four.Id, new[] { "ops" });
+
+        var result = await _repository.GetAllAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            createdTo: new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
+            search: "disk",
+            sortBy: "createdDate",
+            sortDirection: "desc",
+            page: 1,
+            pageSize: 20,
+            tag: " OPS ");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Disk ops active", result.Items[0].Title);
+    }
 }

@@ -1,0 +1,138 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "standalone",
+  "tracker": "",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add many-to-many alert tagging with tag mutation endpoints, tag filter on list API, and tag data in alert responses.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "Introduce a new Tag concept with many-to-many relationship to Alert, including a migration that creates required schema objects (tag table and join table)."
+    },
+    {
+      "id": "AC2",
+      "text": "POST /api/alerts/{id}/tags adds one or more tags for an existing alert, deduplicates tags case-insensitively, enforces max 10 tags per alert, and enforces each tag length 1-30 characters."
+    },
+    {
+      "id": "AC3",
+      "text": "DELETE /api/alerts/{id}/tags/{tag} removes an alert-tag assignment and returns 404 when the alert does not exist or the tag is not assigned to that alert."
+    },
+    {
+      "id": "AC4",
+      "text": "GET /api/alerts supports optional tag filter that composes with existing filters (isActive, severity, created date range, search)."
+    },
+    {
+      "id": "AC5",
+      "text": "AlertResponse includes tags so clients receive tag information in list and single-alert responses."
+    }
+  ],
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Requests/AddAlertTagsRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/AlertTagConfiguration.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs (new)",
+    "AlertService.Models/AlertTag.cs (new)",
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.Data.SQL/Migrations/20261005180717_AddAlertTags.cs (new)",
+    "AlertService.Data.SQL/Migrations/20261005180717_AddAlertTags.Designer.cs (new)",
+    "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs",
+    "AlertService.Data.SQL/Extensions/ServiceCollectionExtensions.cs",
+    "database/02_AlertServiceDb_Migrations.sql"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "No unrelated refactoring outside alert tagging scope.",
+    "Case-insensitive tag dedupe must prevent duplicate assignment variants for the same alert.",
+    "Tag count per alert must not exceed 10 after add operation.",
+    "Tag value length must be validated to 1-30 characters.",
+    "DELETE semantics must return 404 for missing alert or missing alert-tag assignment.",
+    "GET filter composition must preserve current paging/sort behavior."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --collect:\"XPlat Code Coverage\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage for add/delete tag endpoint outcomes including 404 and validation failures.",
+    "Behavior coverage for tag filtering combined with existing filter options.",
+    "Behavior coverage for repository-level case-insensitive tag dedupe and 10-tag limit handling."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "NOT_STARTED",
+      "findings": []
+    },
+    "l1": {
+      "status": "NOT_STARTED",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "POST tags request payload contract is not explicitly specified (expected as JSON array of tag strings versus object wrapper).",
+    "Canonical response casing for tags is unspecified when inputs differ only by case (for example 'Ops' and 'ops')."
+  ]
+}

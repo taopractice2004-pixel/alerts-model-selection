@@ -1,4 +1,5 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -36,6 +37,7 @@ public class AlertManagementService : IAlertService
             request.SortDirection,
             request.Page,
             request.PageSize,
+            request.Tag,
             cancellationToken);
 
         return new PagedResponse<AlertResponse>
@@ -141,6 +143,94 @@ public class AlertManagementService : IAlertService
         await _repository.DeleteAsync(alert, cancellationToken);
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
+        return true;
+    }
+
+    public async Task<(AlertResponse? Alert, string? ValidationError)> AddTagsAsync(int id, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags for alert {AlertId}: not found", id);
+            return (null, null);
+        }
+
+        if (tags.Count == 0)
+        {
+            return (null, "At least one tag is required.");
+        }
+
+        var normalizedTags = new List<string>();
+        var seenTagNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tag in tags)
+        {
+            if (tag is null)
+            {
+                return (null, "Tags cannot contain null values.");
+            }
+
+            var trimmedTag = tag.Trim();
+            if (trimmedTag.Length is < 1 or > AlertConstants.TagMaxLength)
+            {
+                return (null, $"Each tag must be between 1 and {AlertConstants.TagMaxLength} characters.");
+            }
+
+            if (seenTagNames.Add(trimmedTag))
+            {
+                normalizedTags.Add(trimmedTag);
+            }
+        }
+
+        if (normalizedTags.Count == 0)
+        {
+            return (null, "At least one non-empty tag is required.");
+        }
+
+        var existingTagNames = alert.AlertTags
+            .Select(alertTag => alertTag.Tag.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var tagsToAdd = normalizedTags
+            .Where(tag => !existingTagNames.Contains(tag))
+            .ToList();
+
+        if (alert.AlertTags.Count + tagsToAdd.Count > AlertConstants.MaxTagsPerAlert)
+        {
+            return (null, $"An alert can have at most {AlertConstants.MaxTagsPerAlert} tags.");
+        }
+
+        if (tagsToAdd.Count == 0)
+        {
+            return (alert.ToResponse(), null);
+        }
+
+        var updatedAlert = await _repository.AddTagsAsync(id, tagsToAdd, cancellationToken);
+        if (updatedAlert is null)
+        {
+            _logger.LogWarning("Cannot add tags for alert {AlertId}: not found during persistence", id);
+            return (null, null);
+        }
+
+        _logger.LogInformation("Added {TagCount} tags for alert {AlertId}", tagsToAdd.Count, id);
+        return (updatedAlert.ToResponse(), null);
+    }
+
+    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return false;
+        }
+
+        var removed = await _repository.RemoveTagAsync(id, tag, cancellationToken);
+        if (!removed)
+        {
+            _logger.LogWarning("Cannot remove tag '{TagName}' from alert {AlertId}: alert or assignment not found", tag, id);
+            return false;
+        }
+
+        _logger.LogInformation("Removed tag '{TagName}' from alert {AlertId}", tag, id);
         return true;
     }
 }
