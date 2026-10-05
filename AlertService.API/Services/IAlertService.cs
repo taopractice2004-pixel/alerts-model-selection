@@ -12,10 +12,6 @@ public interface IAlertService
 
     Task<AlertResponse?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
-    Task<AlertResponse?> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default);
-
-    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
-
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
     Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);

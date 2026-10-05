@@ -21,7 +21,6 @@ public class AlertRepository : IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
-        string? tag = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
@@ -56,15 +55,8 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
         }
 
-        if (!string.IsNullOrWhiteSpace(tag))
-        {
-            var normalizedTag = NormalizeTag(tag);
-            query = query.Where(a => a.Tags.Any(t => t.NormalizedName == normalizedTag));
-        }
-
         var totalCount = await query.CountAsync(cancellationToken);
-        query = ApplySorting(query, sortBy, sortDirection)
-            .Include(a => a.Tags);
+        query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
             .Skip((page - 1) * pageSize)
@@ -132,9 +124,7 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts
-            .Include(a => a.Tags)
-            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -142,86 +132,6 @@ public class AlertRepository : IAlertRepository
         await _context.Alerts.AddAsync(alert, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return alert;
-    }
-
-    public async Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
-    {
-        var alert = await _context.Alerts
-            .Include(a => a.Tags)
-            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
-
-        if (alert is null)
-        {
-            return null;
-        }
-
-        var requestedTags = tags
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => tag.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(tag => new { Name = tag, NormalizedName = NormalizeTag(tag) })
-            .ToList();
-
-        var normalizedNames = requestedTags
-            .Select(tag => tag.NormalizedName)
-            .ToList();
-
-        var existingTags = await _context.Tags
-            .Where(tagEntity => normalizedNames.Contains(tagEntity.NormalizedName))
-            .ToDictionaryAsync(tagEntity => tagEntity.NormalizedName, cancellationToken);
-
-        var assignedTagNames = alert.Tags
-            .Select(tagEntity => tagEntity.NormalizedName)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var requestedTag in requestedTags)
-        {
-            if (assignedTagNames.Contains(requestedTag.NormalizedName))
-            {
-                continue;
-            }
-
-            if (!existingTags.TryGetValue(requestedTag.NormalizedName, out var tagEntity))
-            {
-                tagEntity = new Tag
-                {
-                    Name = requestedTag.Name,
-                    NormalizedName = requestedTag.NormalizedName
-                };
-
-                _context.Tags.Add(tagEntity);
-                existingTags[requestedTag.NormalizedName] = tagEntity;
-            }
-
-            alert.Tags.Add(tagEntity);
-            assignedTagNames.Add(requestedTag.NormalizedName);
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return alert;
-    }
-
-    public async Task<bool> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default)
-    {
-        var alert = await _context.Alerts
-            .Include(a => a.Tags)
-            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
-
-        if (alert is null)
-        {
-            return false;
-        }
-
-        var normalizedTag = NormalizeTag(tag);
-        var existingTag = alert.Tags.FirstOrDefault(tagEntity => tagEntity.NormalizedName == normalizedTag);
-        if (existingTag is null)
-        {
-            return false;
-        }
-
-        alert.Tags.Remove(existingTag);
-        await _context.SaveChangesAsync(cancellationToken);
-        return true;
     }
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -234,10 +144,5 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    private static string NormalizeTag(string tag)
-    {
-        return tag.Trim().ToUpperInvariant();
     }
 }

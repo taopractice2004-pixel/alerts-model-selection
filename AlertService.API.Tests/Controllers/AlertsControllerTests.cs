@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using AlertService.API.Controllers;
 using AlertService.API.Services;
-using AlertService.Common.Constants;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -29,15 +28,14 @@ public class AlertsControllerTests
         TotalPages = items.Length == 0 ? 0 : 1
     };
 
-    private static AlertResponse SampleResponse(int id = 1, params string[] tags) => new()
+    private static AlertResponse SampleResponse(int id = 1) => new()
     {
         Id = id,
         Title = "Disk usage high",
         Description = "85% used",
         Severity = Severity.High,
         CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-        IsActive = true,
-        Tags = tags
+        IsActive = true
     };
 
     [Fact]
@@ -68,8 +66,7 @@ public class AlertsControllerTests
             PageSize = 10,
             SortBy = "title",
             SortDirection = "asc",
-            Search = "disk",
-            Tag = "ops"
+            Search = "disk"
         };
         _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse(SampleResponse(1)));
 
@@ -125,60 +122,6 @@ public class AlertsControllerTests
     [Theory]
     [InlineData(" ")]
     [InlineData("   ")]
-    public void AlertQueryRequest_WithWhitespaceTag_FailsValidation(string tag)
-    {
-        var request = new AlertQueryRequest
-        {
-            Tag = tag
-        };
-
-        var context = new ValidationContext(request);
-        var results = new List<ValidationResult>();
-
-        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
-
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
-    }
-
-    [Fact]
-    public void AlertQueryRequest_WithTooLongTag_FailsValidation()
-    {
-        var request = new AlertQueryRequest
-        {
-            Tag = new string('x', AlertConstants.TagMaxLength + 1)
-        };
-
-        var context = new ValidationContext(request);
-        var results = new List<ValidationResult>();
-
-        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
-
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
-    }
-
-    [Fact]
-    public void AddAlertTagsRequest_WithInvalidTags_FailsValidation()
-    {
-        var request = new AddAlertTagsRequest
-        {
-            Tags = [" ", new string('x', AlertConstants.TagMaxLength + 1)]
-        };
-
-        var context = new ValidationContext(request);
-        var results = new List<ValidationResult>();
-
-        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
-
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("Tags[0]"));
-        Assert.Contains(results, r => r.MemberNames.Contains("Tags[1]"));
-    }
-
-    [Theory]
-    [InlineData(" ")]
-    [InlineData("   ")]
     [InlineData("\t")]
     public void CreateAlertRequest_WithWhitespaceOnlyTitle_FailsValidation(string title)
     {
@@ -221,14 +164,12 @@ public class AlertsControllerTests
     [Fact]
     public async Task GetById_WhenFound_ReturnsOk()
     {
-        _service.Setup(s => s.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(1, "db", "ops"));
+        _service.Setup(s => s.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse());
 
         var result = await _controller.GetById(1, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<AlertResponse>(ok.Value);
-        Assert.Equal(1, body.Id);
-        Assert.Equal(["db", "ops"], body.Tags);
+        Assert.Equal(1, Assert.IsType<AlertResponse>(ok.Value).Id);
     }
 
     [Fact]
@@ -239,46 +180,6 @@ public class AlertsControllerTests
         var result = await _controller.GetById(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task AddTags_WhenFound_ReturnsOk()
-    {
-        var request = new AddAlertTagsRequest { Tags = ["ops", "db"] };
-        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(SampleResponse(1, "db", "ops"));
-
-        var result = await _controller.AddTags(1, request, CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<AlertResponse>(ok.Value);
-        Assert.Equal(["db", "ops"], body.Tags);
-    }
-
-    [Fact]
-    public async Task AddTags_WhenMissing_ReturnsNotFound()
-    {
-        var request = new AddAlertTagsRequest { Tags = ["ops"] };
-        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((AlertResponse?)null);
-
-        var result = await _controller.AddTags(99, request, CancellationToken.None);
-
-        Assert.IsType<NotFoundResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task AddTags_WhenTagLimitExceeded_ReturnsValidationProblem()
-    {
-        var request = new AddAlertTagsRequest { Tags = ["ops"] };
-        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ArgumentException("An alert can have at most 10 tags.", nameof(AddAlertTagsRequest.Tags)));
-
-        var result = await _controller.AddTags(1, request, CancellationToken.None);
-
-        var validation = Assert.IsType<ObjectResult>(result.Result);
-        var body = Assert.IsType<ValidationProblemDetails>(validation.Value);
-        Assert.Contains(nameof(AddAlertTagsRequest.Tags), body.Errors.Keys);
     }
 
     [Fact]
@@ -379,26 +280,6 @@ public class AlertsControllerTests
         _service.Setup(s => s.DeleteAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await _controller.Delete(99, CancellationToken.None);
-
-        Assert.IsType<NotFoundResult>(result);
-    }
-
-    [Fact]
-    public async Task RemoveTag_WhenFound_ReturnsNoContent()
-    {
-        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(true);
-
-        var result = await _controller.RemoveTag(1, "ops", CancellationToken.None);
-
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task RemoveTag_WhenMissing_ReturnsNotFound()
-    {
-        _service.Setup(s => s.RemoveTagAsync(99, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(false);
-
-        var result = await _controller.RemoveTag(99, "ops", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }
