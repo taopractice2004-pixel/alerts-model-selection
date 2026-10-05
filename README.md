@@ -50,6 +50,8 @@ only to register it in DI (`services.AddSqlDataAccess(configuration)`).
 | PUT    | `/api/alerts/{id}`  | 200              | 400, 404    |
 | PATCH  | `/api/alerts/{id}/deactivate` | 200      | 404         |
 | DELETE | `/api/alerts/{id}`  | 204              | 404         |
+| POST   | `/api/alerts/{id}/tags` | 200 + alert body | 400, 404 |
+| DELETE | `/api/alerts/{id}/tags/{tag}` | 204        | 404         |
 
 `severity` is sent and returned as a string: `Low`, `Medium`, `High` or `Critical`.
 
@@ -61,6 +63,7 @@ only to register it in DI (`services.AddSqlDataAccess(configuration)`).
 - `sortBy=createdDate|severity|title` (default `createdDate`)
 - `sortDirection=asc|desc` (default `desc`)
 - `search=<title fragment>` (case-insensitive, max `200` chars)
+- `tag=<tag>` (case-insensitive, max `30` chars)
 
 This endpoint now returns a paged response wrapper. That is a breaking response-contract change from the previous raw array response.
 

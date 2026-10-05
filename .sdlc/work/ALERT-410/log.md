@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+PR_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -16,7 +16,7 @@ PREPARE_PR
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
+| L0 Review | CHANGES_REQUIRED |
 | L1 Review | NOT_STARTED |
 
 ## Entries
@@ -71,3 +71,33 @@ PREPARE_PR
 - Loop: 0/3 - TESTS_PASSED (unchanged)
 - Deferred: Human confirmation of POST status code, limit-exceeded status, orphan-tag cleanup
 - Next recommended command: /l0-review ALERT-410 - after the developer creates the PR
+
+### 2026-10-05 - /l0-review - CHANGES_REQUIRED
+- Summary: L0 review of 22 source/test files (git diff master...HEAD, framework folders excluded). Scope matches work.json; no secrets, injection or layering-unrelated code issues found; parameterized EF queries used.
+- Findings: ALERT-410-L0-F1 (MEDIUM, route {tag} not length-validated), ALERT-410-L0-F2 (LOW, README/.http not updated)
+- Files changed: work.json (review.l0), log.md (no source/test changes)
+- Build/Unit tests/Coverage: reused from earlier entries; not re-run
+- Loop: 0/3 - TESTS_PASSED (unchanged); review.cycle 0/3
+- Next recommended command: /address-review-comments ALERT-410 l0
+
+### 2026-10-05 - /address-review-comments (l0) - STAGE_PASSED
+- Summary: Resolved ALERT-410-L0-F1 (RemoveTagAsync now returns false for empty or >TagMaxLength tags) and ALERT-410-L0-F2 (README route/query tables and .http samples updated).
+- Files changed: AlertService.API/Services/AlertManagementService.cs, README.md, AlertService.API/AlertService.API.http, work.json, log.md
+- Build: dotnet build AlertService.API/AlertService.API.csproj -> succeeded (0 warnings, 0 errors)
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Loop: 0/3 - TESTS_PASSED (unchanged); review.cycle 1/3
+- Deferred: Test for the over-length route tag in RemoveTagAsync (to be added in /unit-testing)
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-06 - /unit-testing - WAITING_FOR_HUMAN
+- Summary: Review-fix revalidation (origin l0). Added regression test RemoveTagAsync_WithOverLengthTag_ReturnsFalse_WithoutLookupOrRemoval for ALERT-410-L0-F1.
+- Files changed: AlertService.API.Tests/Services/AlertManagementServiceTests.cs, log.md
+- Build: tests built via dotnet test (succeeded)
+- Unit tests: dotnet test AlertService.Data.SQL.Tests -> 44 passed; dotnet test AlertService.API.Tests -> 76 passed; 0 failed
+- Acceptance criteria: AC1-AC8 MET
+- Coverage: not re-run (previous: service/controller/mapping 100%; Data.SQL NOT_CONFIGURED)
+- Bugs: None
+- Review: review.return_after_testing remains true; review.cycle 1/3
+- Loop: 0/3 - TESTS_PASSED
+- Standards notes: No production code changed; no testability seams added
+- Next recommended command: /l0-review ALERT-410 - after the developer updates the SAME PR

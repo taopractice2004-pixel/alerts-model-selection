@@ -203,7 +203,7 @@ public class AlertManagementService : IAlertService
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(tag))
+        if (string.IsNullOrWhiteSpace(tag) || tag.Trim().Length > AlertConstants.TagMaxLength)
         {
             return false;
         }

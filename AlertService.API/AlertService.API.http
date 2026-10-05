@@ -32,3 +32,17 @@ DELETE {{baseUrl}}/api/alerts/1
 
 ###
 PATCH {{baseUrl}}/api/alerts/1/deactivate
+
+###
+POST {{baseUrl}}/api/alerts/1/tags
+Content-Type: application/json
+
+{
+  "tags": ["network", "prod"]
+}
+
+###
+DELETE {{baseUrl}}/api/alerts/1/tags/network
+
+###
+GET {{baseUrl}}/api/alerts?tag=prod

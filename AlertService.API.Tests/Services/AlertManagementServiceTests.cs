@@ -550,6 +550,17 @@ public class AlertManagementServiceTests
         Assert.False(result);
     }
 
+    [Fact]
+    public async Task RemoveTagAsync_WithOverLengthTag_ReturnsFalse_WithoutLookupOrRemoval()
+    {
+        var tag = new string('a', AlertService.Common.Constants.AlertConstants.TagMaxLength + 1);
+
+        var result = await _service.RemoveTagAsync(1, tag);
+
+        Assert.False(result);
+        _repository.Verify(r => r.RemoveTagAsync(It.IsAny<Alert>(), It.IsAny<Tag>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
     [InlineData("prod")]
     [InlineData("PROD")]

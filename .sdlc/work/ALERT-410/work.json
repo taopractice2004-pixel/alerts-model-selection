@@ -99,11 +99,33 @@
     "url": ""
   },
   "review": {
-    "cycle": 0,
+    "cycle": 1,
     "max_review_cycles": 3,
-    "origin": "",
-    "return_after_testing": false,
-    "l0": { "status": "NOT_STARTED", "findings": [] },
+    "origin": "l0",
+    "return_after_testing": true,
+    "l0": {
+      "status": "CHANGES_REQUIRED",
+      "findings": [
+        {
+          "id": "ALERT-410-L0-F1",
+          "severity": "MEDIUM",
+          "location": "AlertService.API/Services/AlertManagementService.cs RemoveTagAsync; AlertService.API/Controllers/AlertsController.cs RemoveTag",
+          "description": "The {tag} route value of DELETE /api/alerts/{id}/tags/{tag} is not length-validated; it is trimmed and lower-cased at any length before lookup.",
+          "reason": "work.json constraints require tag path/query values to be length-validated as untrusted input; the GET ?tag query is bounded by [StringLength] but the route value is not.",
+          "suggestion": "In RemoveTagAsync, return false when the trimmed tag is empty or longer than AlertConstants.TagMaxLength (a tag that long cannot be assigned), and add a test.",
+          "status": "RESOLVED"
+        },
+        {
+          "id": "ALERT-410-L0-F2",
+          "severity": "LOW",
+          "location": "README.md (route table, ~lines 46-52); AlertService.API/AlertService.API.http",
+          "description": "New endpoints POST /api/alerts/{id}/tags, DELETE /api/alerts/{id}/tags/{tag} and the GET ?tag filter are not documented in the README route/query tables or the .http sample file.",
+          "reason": "Both files are recorded as adjacent dependencies in work.json and currently list every other endpoint; leaving them stale makes the docs inconsistent with the API.",
+          "suggestion": "Add the two routes (200/400/404 and 204/404) and the 'tag' query parameter to the README, and sample requests to the .http file.",
+          "status": "RESOLVED"
+        }
+      ]
+    },
     "l1": { "status": "NOT_STARTED", "findings": [] }
   },
   "repo_context_fallback_needed": false,
