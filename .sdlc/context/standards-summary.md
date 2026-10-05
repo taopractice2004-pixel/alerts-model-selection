@@ -11,17 +11,20 @@
 | `api-rest` | `api-rest-standards.md` | API / external contracts | Changing routes, request/response contracts, events, or externally consumed interfaces | Keep contracts consistent; version changes deliberately | High when present |
 | `service-architecture` | `service-architecture-standards.md` | Internal architecture | Changing boundaries, orchestration, async flows, or integrations | Clear boundaries between delivery, business, and persistence/integration layers | High when present |
 | `database` | `database-standards.md` | Database / persistence | Changing schema, queries, migrations, repositories, or ORM behavior | Avoid risky query patterns, review indexing, preserve naming and rollback discipline | High when present |
-| `frontend-react` | `frontend-react-standards.md` | Frontend / client app | Touching UI components, state, routing, or client-side data flows | Focused components, separated concerns, accessibility, maintainability | Conditional |
-| `ui` | `ui-standards.md` | Markup / styling / a11y | Touching markup, styling, layout, or presentation | Semantic structure, accessible content, maintainable styling | Conditional |
+| `frontend-react` | `frontend-react-standards.md` | Frontend / client app | `NOT_APPLICABLE` — no frontend code in this repository | Focused components, separated concerns, accessibility, maintainability | Conditional |
+| `ui` | `ui-standards.md` | Markup / styling / a11y | `NOT_APPLICABLE` — no markup/styling in this repository | Semantic structure, accessible content, maintainable styling | Conditional |
 
-Version guidance: validate every row against the target repository's actual versions and
-frameworks; record `NOT_AVAILABLE` for standards that do not exist there.
+Version guidance: this repository is .NET 8 / EF Core 8.0.31 / SQL Server; all backend standards
+apply as written.
 
 ## Selection Rules
 
 - Always apply `coding` when present.
 - Apply other standards only when the work touches that area and the standard exists in the
   target repository.
+- Typical selection here: controller/route/DTO changes → `api-rest` + `backend-dotnet`;
+  service/orchestration changes → `service-architecture` + `backend-dotnet`;
+  repository/DbContext/migration/SQL changes → `database`.
 - Record at most 5 ids in `work.json` → `selected_standards`.
 
 ## Loading Model

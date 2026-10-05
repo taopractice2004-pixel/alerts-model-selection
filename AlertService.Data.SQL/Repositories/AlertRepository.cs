@@ -25,6 +25,7 @@ public class AlertRepository : IAlertRepository
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
         int pageSize = AlertConstants.DefaultPageSize,
+        string? tag = null,
         CancellationToken cancellationToken = default)
     {
         IQueryable<Alert> query = _context.Alerts.AsNoTracking();
@@ -55,10 +56,17 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
         }
 
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = tag.Trim().ToLower();
+            query = query.Where(a => a.Tags.Any(t => t.Name.ToLower() == normalizedTag));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
+            .Include(a => a.Tags)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -124,7 +132,39 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
+    {
+        var loweredNames = tagNames.Select(n => n.ToLowerInvariant()).ToList();
+        var existingTags = await _context.Tags
+            .Where(t => loweredNames.Contains(t.Name.ToLower()))
+            .ToListAsync(cancellationToken);
+
+        foreach (var name in tagNames)
+        {
+            var tag = existingTags.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))
+                ?? new Tag { Name = name };
+            alert.Tags.Add(tag);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(Alert alert, string tag, CancellationToken cancellationToken = default)
+    {
+        var assigned = alert.Tags.FirstOrDefault(t => string.Equals(t.Name, tag, StringComparison.OrdinalIgnoreCase));
+        if (assigned is null)
+        {
+            return false;
+        }
+
+        alert.Tags.Remove(assigned);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)

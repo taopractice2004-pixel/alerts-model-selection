@@ -128,6 +128,11 @@ Review-fix loop (L0/L1/L2 comments):
   `review.return_after_testing: true`, and recommend `/unit-testing`. A
   `REQUIREMENT_OR_SCOPE_CHANGE` routes to `/analyze-story`; `NEEDS_HUMAN_CLARIFICATION` STOPs
   `WAITING_FOR_HUMAN`.
+- **Review-fix loop limit:** at most `review.max_review_cycles` = **3** `/address-review-comments`
+  cycles (counted in `review.cycle`, across L0/L1/L2). If review still returns
+  `CHANGES_REQUIRED` (or L2 comments) after the 3rd cycle, `/address-review-comments` refuses to
+  run, returns `WAITING_FOR_HUMAN`, and recommends no further pipeline command: a developer must
+  investigate. Only a human may reset `review.cycle` to 0.
 - **Review re-entry rule:** any production-code change from L0/L1/L2 comments must re-run
   `/unit-testing`, then the developer updates the SAME PR, and review restarts from `/l0-review`
   → `/l1-review` → L2 — never jump straight back to the level that raised the comment. The
@@ -152,9 +157,10 @@ Review-fix loop (L0/L1/L2 comments):
 | `/fix-bugs` with `fix_iteration` already 3 | `None — escalated to developer` (`WAITING_FOR_HUMAN`) |
 | `/prepare-pr` passed | `WAITING_FOR_HUMAN` — developer creates/pushes PR, then `/l0-review <ID>` |
 | `/l0-review` PASS | `/l1-review <ID>` |
-| `/l0-review` `CHANGES_REQUIRED` | `/address-review-comments <ID> l0` |
+| `/l0-review` `CHANGES_REQUIRED`, `review.cycle` < 3 | `/address-review-comments <ID> l0` |
+| `/l0-review` / `/l1-review` `CHANGES_REQUIRED`, `review.cycle` = 3 | `None — escalated to developer` (`WAITING_FOR_HUMAN`) |
 | `/l1-review` PASS | `WAITING_FOR_HUMAN` — L2 client review (human-only); no AI command |
-| `/l1-review` `CHANGES_REQUIRED` | `/address-review-comments <ID> l1` |
+| `/l1-review` `CHANGES_REQUIRED`, `review.cycle` < 3 | `/address-review-comments <ID> l1` |
 | `/address-review-comments` in-scope fixes applied | `/unit-testing <ID> current_story` |
 | `/address-review-comments` requirement/scope change | `/analyze-story <ID>` |
 | `/address-review-comments` needs clarification | `WAITING_FOR_HUMAN` — no AI command until clarified |
