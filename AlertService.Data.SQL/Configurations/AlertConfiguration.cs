@@ -38,5 +38,26 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
             .IsRequired();
 
         builder.HasIndex(a => a.IsActive);
+
+        builder.HasMany(a => a.Tags)
+            .WithMany(t => t.Alerts)
+            .UsingEntity<Dictionary<string, object>>(
+                "AlertTags",
+                right => right.HasOne<Tag>()
+                    .WithMany()
+                    .HasForeignKey("TagId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("FK_TagId_Tags_Id"),
+                left => left.HasOne<Alert>()
+                    .WithMany()
+                    .HasForeignKey("AlertId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("FK_AlertId_Alerts_Id"),
+                join =>
+                {
+                    join.ToTable("AlertTags");
+                    join.HasKey("AlertId", "TagId");
+                    join.HasIndex("TagId");
+                });
     }
 }

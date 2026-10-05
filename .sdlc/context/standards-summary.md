@@ -6,16 +6,17 @@
 
 | Standard Id | Source File | Scope | Applies When | Key Rules | Priority |
 |---|---|---|---|---|---|
-| `coding` | `coding-standards.md` | Global engineering | Always | Match existing patterns, avoid hardcoded values, validate failure paths, keep tests focused and deterministic | Global / highest |
-| `backend-dotnet` | `backend-dotnet-standards.md` | Backend / service code | Touching backend logic, APIs, jobs, middleware, or server-side tests | Preserve layering, naming/layout conventions, and operational safety practices | High when present |
-| `api-rest` | `api-rest-standards.md` | API / external contracts | Changing routes, request/response contracts, events, or externally consumed interfaces | Keep contracts consistent; version changes deliberately | High when present |
-| `service-architecture` | `service-architecture-standards.md` | Internal architecture | Changing boundaries, orchestration, async flows, or integrations | Clear boundaries between delivery, business, and persistence/integration layers | High when present |
-| `database` | `database-standards.md` | Database / persistence | Changing schema, queries, migrations, repositories, or ORM behavior | Avoid risky query patterns, review indexing, preserve naming and rollback discipline | High when present |
-| `frontend-react` | `frontend-react-standards.md` | Frontend / client app | Touching UI components, state, routing, or client-side data flows | Focused components, separated concerns, accessibility, maintainability | Conditional |
-| `ui` | `ui-standards.md` | Markup / styling / a11y | Touching markup, styling, layout, or presentation | Semantic structure, accessible content, maintainable styling | Conditional |
+| `coding` | `coding-standards.md` | Global engineering | Always | Stay aligned with existing patterns, avoid hardcoded values, validate edge/failure paths, and keep tests focused and deterministic | Global / highest |
+| `backend-dotnet` | `backend-dotnet-standards.md` | Backend / service code | Touching C# projects, controllers, services, middleware, or tests | Consistent naming/layout, small cohesive methods/classes, deliberate exception handling, and layered separation | High when present |
+| `api-rest` | `api-rest-standards.md` | API / external contracts | Changing controllers, routes, request/response models, or external API behavior | Resource-oriented URIs, consistent HTTP semantics/status codes, RFC7807-style errors, and deliberate versioning | High when present |
+| `service-architecture` | `service-architecture-standards.md` | Internal architecture | Changing orchestration, dependency boundaries, integrations, or DI composition roots | Keep REST delivery separate from business logic, route persistence through services, and reflect contract changes in Swagger/OpenAPI output | High when present |
+| `database` | `database-standards.md` | Database / persistence | Changing repositories, EF queries, migrations, schema, or SQL scripts | Review indexing/performance, keep names consistent, avoid broad projections, and treat EF-generated SQL with DBA-level scrutiny | High when present |
+| `frontend-react` | `frontend-react-standards.md` | Frontend / client app | Touching `*.ts`, `*.tsx`, `*.js`, or `*.jsx` client code if added later | Small focused components, approved data-loading patterns, stable contracts/test hooks, and maintainable styling | Conditional |
+| `ui` | `ui-standards.md` | Markup / styling / a11y | Touching HTML/CSS/SCSS if added later | Semantic HTML, accessibility-first content structure, and low-specificity maintainable CSS | Conditional |
 
-Version guidance: validate every row against the target repository's actual versions and
-frameworks; record `NOT_AVAILABLE` for standards that do not exist there.
+Version guidance: all seven standards source files are present in this repository. The active
+implementation today is backend-focused (`.cs`, `.csproj`, SQL, controllers, services, and EF
+Core); frontend/UI standards remain available for future matching files.
 
 ## Selection Rules
 

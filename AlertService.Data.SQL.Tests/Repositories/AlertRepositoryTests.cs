@@ -228,6 +228,31 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAllAsync_WithTag_ComposesWithExistingFilters()
+    {
+        var matchingAlert = await _repository.AddAsync(NewAlert("Disk infra issue", Severity.Critical, new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var wrongTagAlert = await _repository.AddAsync(NewAlert("Disk app issue", Severity.Critical, new DateTime(2026, 2, 12, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var wrongSeverityAlert = await _repository.AddAsync(NewAlert("Disk infra warning", Severity.High, new DateTime(2026, 2, 14, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        await _repository.AddTagsAsync(matchingAlert.Id, ["Infra"]);
+        await _repository.AddTagsAsync(wrongTagAlert.Id, ["App"]);
+        await _repository.AddTagsAsync(wrongSeverityAlert.Id, ["infra"]);
+
+        var result = await _repository.GetAllAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            createdTo: new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
+            search: "disk",
+            tag: " infra ");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Disk infra issue", result.Items[0].Title);
+        Assert.Equal(["Infra"], result.Items[0].Tags.Select(t => t.Name).ToArray());
+    }
+
+    [Fact]
     public async Task GetAllAsync_WithSortByTitleAscending_ReturnsAlphabeticalPage()
     {
         await _repository.AddAsync(NewAlert("Zulu", Severity.High, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
@@ -329,6 +354,44 @@ public class AlertRepositoryTests : IDisposable
         var result = await _repository.GetByIdAsync(999);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenAlertMissing_ReturnsNull()
+    {
+        var result = await _repository.AddTagsAsync(999, ["ops"]);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_PersistsTags_DeduplicatesCaseInsensitively_AndReusesExistingTagEntities()
+    {
+        var firstAlert = await _repository.AddAsync(NewAlert("First"));
+        var secondAlert = await _repository.AddAsync(NewAlert("Second"));
+
+        await _repository.AddTagsAsync(firstAlert.Id, ["Ops"]);
+        var updated = await _repository.AddTagsAsync(secondAlert.Id, [" ops ", "OPS", "db"]);
+
+        Assert.NotNull(updated);
+        Assert.Equal(["db", "Ops"], updated!.Tags.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).Select(t => t.Name).ToArray());
+
+        _context.ChangeTracker.Clear();
+        var tags = await _context.Tags.Include(tag => tag.Alerts).OrderBy(tag => tag.Name).ToListAsync();
+        Assert.Equal(2, tags.Count);
+        Assert.Equal("Ops", tags[1].Name);
+        Assert.Equal(2, tags[1].Alerts.Count);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAssignmentMissing_ReturnsFalse()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert.Id, ["Ops"]);
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, "db");
+
+        Assert.False(removed);
     }
 
     [Fact]

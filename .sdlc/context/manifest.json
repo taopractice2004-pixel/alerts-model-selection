@@ -1,26 +1,71 @@
 {
   "schemaVersion": 2,
-  "stage": "setup-repo-context-not-yet-run",
-  "generatedAtUtc": null,
-  "repositoryMode": "TO_BE_DISCOVERED (EXISTING_PROJECT | NEW_PROJECT)",
+  "stage": "setup-repo-context",
+  "generatedAtUtc": "2026-10-05T13:55:52.8354839Z",
+  "repositoryMode": "EXISTING_PROJECT",
   "contextFiles": [
     "manifest.json",
     "project-profile.md",
     "standards-summary.md"
   ],
   "detected": {
-    "technologies": [],
+    "technologies": [
+      "C#",
+      ".NET 8",
+      "ASP.NET Core Web API",
+      "Entity Framework Core 8",
+      "SQL Server",
+      "Serilog",
+      "Swagger",
+      "xUnit",
+      "Moq"
+    ],
     "sourceInputs": {
       "requirementsDocs": [],
-      "rootDocs": [],
-      "buildFiles": [],
-      "standards": [],
-      "sampleSource": []
+      "rootDocs": [
+        "README.md"
+      ],
+      "buildFiles": [
+        "AlertService.sln",
+        "Directory.Build.props",
+        "dotnet-tools.json",
+        "AlertService.API/AlertService.API.csproj",
+        "AlertService.Data/AlertService.Data.csproj",
+        "AlertService.Data.SQL/AlertService.Data.SQL.csproj",
+        "AlertService.API.Tests/AlertService.API.Tests.csproj",
+        "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+      ],
+      "standards": [
+        "standards/api-rest-standards.md",
+        "standards/backend-dotnet-standards.md",
+        "standards/coding-standards.md",
+        "standards/database-standards.md",
+        "standards/frontend-react-standards.md",
+        "standards/service-architecture-standards.md",
+        "standards/ui-standards.md"
+      ],
+      "sampleSource": [
+        "AlertService.API/Program.cs",
+        "AlertService.API/Controllers/AlertsController.cs",
+        "AlertService.API/Services/AlertManagementService.cs",
+        "AlertService.Data/Interfaces/IAlertRepository.cs",
+        "AlertService.Data.SQL/AlertDbContext.cs",
+        "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+        "AlertService.Data.SQL/Extensions/ServiceCollectionExtensions.cs"
+      ]
     }
   },
   "exclusions": {
-    "excludedPaths": [],
-    "excludedPatterns": [],
+    "excludedPaths": [
+      ".git/",
+      ".vs/"
+    ],
+    "excludedPatterns": [
+      "**/bin/",
+      "**/obj/",
+      "**/TestResults/",
+      "**/Logs/"
+    ],
     "reason": "Generated, dependency, build, cache, binary or runtime-noise content that should normally not be used as Copilot context.",
     "notes": "Computed by /setup-repo-context from detected.technologies, .gitignore, and actual repository structure. Never exclude normal source code, and never exclude config files (*.json, *.xml, *.yaml, *.yml, *.properties) solely by extension. /refresh-repo-context recalculates this section only when structure, technology, .gitignore, build configuration, or generated-output patterns materially change."
   },
@@ -92,5 +137,5 @@
       }
     ]
   },
-  "notes": "Starter manifest. After copying this package into a real repository, run /setup-repo-context 1 (existing repository) or /setup-repo-context 2 <requirements doc> (new repository) before /analyze-story, /fix-bugs, or /unit-testing. Run /refresh-repo-context later only when repository context changes materially. Do not reuse a filled-in manifest from another project."
+  "notes": "Repository cache generated from the existing AlertService solution. Refresh it when repository structure, standards, or build/test commands materially change."
 }
