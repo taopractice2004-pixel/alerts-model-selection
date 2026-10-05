@@ -110,13 +110,23 @@
     "url": ""
   },
   "review": {
-    "cycle": 0,
+    "cycle": 1,
     "max_review_cycles": 3,
-    "origin": "IMPLEMENTATION",
+    "origin": "l0",
     "return_after_testing": false,
     "l0": {
-      "status": "NOT_STARTED",
-      "findings": []
+      "status": "CHANGES_REQUIRED",
+      "findings": [
+        {
+          "id": "ALERT-410-L0-F1",
+          "severity": "HIGH",
+          "location": "PR changed-file set (.github/, .sdlc/context/, .sdlc/templates/, standards/)",
+          "description": "The current PR includes repository framework, standards, and context/template files that are outside the approved ALERT-410 story scope.",
+          "reason": "`work.json` scopes this story to the alert-tagging production files, three test files, and the ALERT-410 work-item artifacts. The committed diff also includes unrelated SDLC framework assets and repository context/template files, which violates L0 scope discipline and makes the PR review set materially broader than the approved work.",
+          "suggestion": "Remove the unrelated `.github/`, `.sdlc/context/`, `.sdlc/templates/`, and `standards/` changes from this PR, or split them into a separate setup/framework PR so the ALERT-410 review contains only the scoped implementation, test, and ALERT-410 work-item artifact files.",
+          "status": "RESOLVED"
+        }
+      ]
     },
     "l1": {
       "status": "NOT_STARTED",

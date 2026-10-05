@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+UNIT_TESTING
 
 | Stage | Status |
 |---|---|
@@ -16,7 +16,7 @@ PREPARE_PR
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
+| L0 Review | CHANGES_REQUIRED |
 | L1 Review | NOT_STARTED |
 
 ## Entries
@@ -74,3 +74,39 @@ PREPARE_PR
 - Loop: 0/3 — TESTS_PASSED
 - Standards notes: None
 - Next recommended command: /l0-review ALERT-410
+
+### 2026-10-06 — /l0-review ALERT-410 — CHANGES_REQUIRED
+- Summary: L0 review found one scope-discipline issue in the current PR diff. The alert-tagging implementation and tests were clean on file diagnostics, but the committed change set also includes unrelated repository framework and context/template files outside the approved ALERT-410 scope.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Changed-files source: `git show --stat --name-only --oneline HEAD`
+- Build: Reused recorded `/implement-story` result
+- Unit tests: Reused recorded `/unit-testing` result
+- Findings: `ALERT-410-L0-F1 (HIGH)`
+- Review: `ALERT-410-L0-F1` remains OPEN in `work.json` → `review.l0.findings`
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Scope discipline failed because the PR diff extends beyond the story's approved source, test, and work-item artifact slice.
+- Next recommended command: /address-review-comments ALERT-410 l0
+
+### 2026-10-06 — /address-review-comments ALERT-410 l0 — STAGE_PASSED
+- Summary: Removed the out-of-scope framework, standards, and SDLC context/template files from the current worktree so the next branch update narrows ALERT-410 back to the approved alert-tagging slice. Resolved the recorded L0 scope finding and set review re-entry to return through `/unit-testing`.
+- Files changed: `.github/copilot-instructions.md`, `.github/instructions/development.instructions.md`, `.github/instructions/documentation.instructions.md`, `.github/instructions/security.instructions.md`, `.github/instructions/standards/api-rest.instructions.md`, `.github/instructions/standards/backend-dotnet.instructions.md`, `.github/instructions/standards/coding.instructions.md`, `.github/instructions/standards/database.instructions.md`, `.github/instructions/standards/frontend-react.instructions.md`, `.github/instructions/standards/service-architecture.instructions.md`, `.github/instructions/standards/ui.instructions.md`, `.github/skills/address-review-comments/SKILL.md`, `.github/skills/analyze-story/SKILL.md`, `.github/skills/fix-bugs/SKILL.md`, `.github/skills/implement-story/SKILL.md`, `.github/skills/l0-review/SKILL.md`, `.github/skills/l1-review/SKILL.md`, `.github/skills/prepare-pr/SKILL.md`, `.github/skills/refresh-repo-context/SKILL.md`, `.github/skills/setup-repo-context/SKILL.md`, `.github/skills/unit-testing/SKILL.md`, `.sdlc/context/manifest.json`, `.sdlc/context/project-profile.md`, `.sdlc/context/standards-summary.md`, `.sdlc/templates/log.template.md`, `.sdlc/templates/plan.template.md`, `.sdlc/templates/work.template.json`, `standards/api-rest-standards.md`, `standards/backend-dotnet-standards.md`, `standards/coding-standards.md`, `standards/database-standards.md`, `standards/frontend-react-standards.md`, `standards/service-architecture-standards.md`, `standards/ui-standards.md`, `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Resolved findings: `ALERT-410-L0-F1`
+- Build: `dotnet build AlertService.API/AlertService.API.csproj` → SUCCEEDED
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Review: `ALERT-410-L0-F1` marked RESOLVED; review re-entry set to `/unit-testing`
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Kept the fix limited to removing files that were outside the approved story scope.
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-06 — /unit-testing ALERT-410 current_story — STAGE_PASSED
+- Summary: Reran the scoped API and repository unit suites after resolving the L0 scope issue. The alert-tagging slice still passes cleanly, so the story is validated for branch/PR update and L0 re-review.
+- Files changed: `.sdlc/work/ALERT-410/work.json`, `.sdlc/work/ALERT-410/log.md`
+- Build: Implicit through `dotnet test` for the scoped test projects → SUCCEEDED
+- Unit tests: `dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter "FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests"` → 48/48 passed; `dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter "FullyQualifiedName~AlertRepositoryTests"` → 31/31 passed
+- Acceptance criteria: AC1 MET; AC2 MET; AC3 MET; AC4 MET; AC5 MET
+- Coverage: NOT_CONFIGURED
+- Bugs: None
+- Review: L0 finding remains RESOLVED in `work.json`; review re-entry through testing is complete
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Validation stayed scoped to the approved controller, service, and repository test seams.
+- Next recommended command: Update the branch/PR with the current worktree changes, then run /l0-review ALERT-410
