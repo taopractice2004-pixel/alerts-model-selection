@@ -349,6 +349,27 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateAsync_OnTaggedAlert_DoesNotMarkLoadedTagsModified()
+    {
+        var alert = await AddTaggedAlertAsync("Tagged", Severity.High, Jan, true, "ops", "prod");
+        _context.ChangeTracker.Clear();
+        var loaded = (await _repository.GetByIdAsync(alert.Id))!;
+        var tagStates = new List<EntityState>();
+        _context.SavingChanges += (_, _) =>
+            tagStates.AddRange(_context.ChangeTracker.Entries<Tag>().Select(e => e.State));
+
+        loaded.Title = "Renamed";
+        await _repository.UpdateAsync(loaded);
+
+        Assert.Equal(2, tagStates.Count);
+        Assert.All(tagStates, s => Assert.Equal(EntityState.Unchanged, s));
+        _context.ChangeTracker.Clear();
+        var reloaded = (await _repository.GetByIdAsync(alert.Id))!;
+        Assert.Equal("Renamed", reloaded.Title);
+        Assert.Equal(2, reloaded.Tags.Count);
+    }
+
+    [Fact]
     public async Task DeleteAsync_RemovesAlert()
     {
         var added = await _repository.AddAsync(NewAlert());

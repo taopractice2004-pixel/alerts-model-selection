@@ -176,7 +176,8 @@ public class AlertRepository : IAlertRepository
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
     {
-        _context.Alerts.Update(alert);
+        // Entry() avoids Update() marking the loaded shared Tag rows as Modified.
+        _context.Entry(alert).State = EntityState.Modified;
         await _context.SaveChangesAsync(cancellationToken);
     }
 

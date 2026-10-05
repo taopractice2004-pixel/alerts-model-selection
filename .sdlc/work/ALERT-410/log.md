@@ -6,17 +6,17 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+PR_REVIEW
 
 | Stage | Status |
 |---|---|
 | Story Analysis | STAGE_PASSED |
 | Implementation | STAGE_PASSED |
-| Unit Testing | STAGE_PASSED |
+| Unit Testing | WAITING_FOR_HUMAN (review-fix revalidation passed) |
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
+| L0 Review | PASS (F1 resolved; re-review required after PR update) |
 | L1 Review | NOT_STARTED |
 
 ## Entries
@@ -72,3 +72,32 @@ PREPARE_PR
 - Loop: 0/3 — TESTS_PASSED
 - Deferred: Developer must create the PR manually and fill `work.json` → `pr.url`.
 - Next recommended command: /l0-review ALERT-410 — after the developer confirms the PR exists
+
+### 2026-10-05 — /l0-review — CHANGES_REQUIRED
+- Summary: Read-only L0 review of the ALERT-410 changes (commit 5866774 on ALL-SONNET vs HEAD~1; source, migration, DTO, test-support files). Scope, naming, constants, logging (no tag values or secrets), parameterized LINQ and diagnostics are clean. 1 finding: ALERT-410-L0-F1 (MEDIUM) — `UpdateAsync` uses `Alerts.Update(alert)` while `GetByIdAsync` now tracks `Tags`, marking shared Tag rows Modified.
+- Files changed: None (review only) — `work.json` → `review.l0`
+- Build: NOT_RUN (reused /unit-testing result); editor diagnostics: no errors
+- Unit tests: NOT_RUN (reused /unit-testing result)
+- Loop: 0/3 — TESTS_PASSED
+- Review: L0 CHANGES_REQUIRED (F1 MEDIUM); review.cycle 0/3
+- Next recommended command: /address-review-comments ALERT-410 l0
+
+### 2026-10-05 — /address-review-comments (l0) — STAGE_PASSED
+- Summary: ALERT-410-L0-F1 classified IN_SCOPE_TECHNICAL_FIX and resolved: `AlertRepository.UpdateAsync` now sets `_context.Entry(alert).State = EntityState.Modified` instead of `Alerts.Update(alert)`, so loaded shared Tag rows are no longer marked Modified.
+- Files changed: AlertService.Data.SQL/Repositories/AlertRepository.cs; .sdlc/work/ALERT-410/work.json
+- Build: dotnet build AlertService.sln → succeeded (0 warnings, 0 errors)
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Review: review.l0 PASS; review.cycle 1/3; return_after_testing true; origin l0
+- Next recommended command: /unit-testing ALERT-410 current_story
+
+### 2026-10-05 — /unit-testing (review-fix revalidation, origin l0) — WAITING_FOR_HUMAN
+- Summary: Revalidated after the L0-F1 fix. Added regression test `UpdateAsync_OnTaggedAlert_DoesNotMarkLoadedTagsModified` (captures Tag entry states in `SavingChanges`; all Unchanged, alert update persisted, tags retained). No production code changed; no testability seams.
+- Files changed: AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs
+- Build: built implicitly by `dotnet test` (succeeded)
+- Unit tests: `dotnet test AlertService.API.Tests` → 70/70 passed; `dotnet test AlertService.Data.SQL.Tests` → 50/50 passed
+- Acceptance criteria: AC1–AC9 MET (unchanged; covered by the passing suites)
+- Coverage: not re-run (only the one-line `UpdateAsync` changed; prior result stands)
+- Bugs: None
+- Review: return_after_testing true (origin l0, cycle 1/3); developer must update the SAME PR
+- Loop: 0/3 — TESTS_PASSED
+- Next recommended command: /l0-review ALERT-410 — after the PR is updated

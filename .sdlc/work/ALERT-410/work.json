@@ -100,11 +100,26 @@
     "url": ""
   },
   "review": {
-    "cycle": 0,
+    "cycle": 1,
     "max_review_cycles": 3,
-    "origin": "",
-    "return_after_testing": false,
-    "l0": { "status": "NOT_STARTED", "findings": [] },
+    "origin": "l0",
+    "return_after_testing": true,
+    "l0": {
+      "status": "PASS",
+      "findings": [
+        {
+          "id": "ALERT-410-L0-F1",
+          "severity": "MEDIUM",
+          "location": "AlertService.Data.SQL/Repositories/AlertRepository.cs: UpdateAsync (with GetByIdAsync .Include(a => a.Tags))",
+          "description": "GetByIdAsync now tracks the alert with its Tags, and the existing UpdateAsync calls _context.Alerts.Update(alert). DbSet.Update traverses the reachable graph and marks every reachable entity with a key (the loaded Tag rows) as Modified, so UpdateAsync/DeactivateAsync on a tagged alert issue unnecessary UPDATE statements against shared Tags rows.",
+          "reason": "Unintended side effect on existing update/deactivate paths: extra writes to shared Tag rows (contention risk) introduced by the tag change; not caught by the SQLite tests because values are unchanged.",
+          "suggestion": "In UpdateAsync mark only the alert as modified (e.g. _context.Entry(alert).State = EntityState.Modified, or rely on change tracking and just SaveChangesAsync) so the Tags graph is not marked Modified; keep the change minimal.",
+          "status": "RESOLVED",
+          "classification": "IN_SCOPE_TECHNICAL_FIX",
+          "changed_files": ["AlertService.Data.SQL/Repositories/AlertRepository.cs"]
+        }
+      ]
+    },
     "l1": { "status": "NOT_STARTED", "findings": [] },
     "l2": { "status": "NOT_STARTED", "comments": [] }
   },
