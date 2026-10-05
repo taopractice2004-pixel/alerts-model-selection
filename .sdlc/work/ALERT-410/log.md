@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PR_REVIEW
+L1_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -17,7 +17,7 @@ PR_REVIEW
 | Test → Fix Loop | 2/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
 | L0 Review | STAGE_PASSED |
-| L1 Review | CHANGES_REQUIRED |
+| L1 Review | STAGE_PASSED |
 
 ## Entries
 
@@ -177,3 +177,21 @@ PR_REVIEW
 - Loop: 2/3 - TESTS_PASSED
 - Standards notes: No production code changed; no testability seams added
 - Next recommended command: /l0-review ALERT-410 - after the developer updates the SAME PR
+
+### 2026-10-06 - /l0-review - STAGE_PASSED
+- Summary: Re-review after the L1-F1 fix. Scope matches work.json (AlertRepository.AddTagsAsync retry plus 3 retry tests in AlertRepositoryTests; no unrelated changes, no TmpDebug leftovers). Parameterized EF queries, no secrets or new dependencies, comments are one-line and explain non-obvious EF behavior, bounded retry (one attempt) rethrows on persistent failure, build clean (0 warnings).
+- Findings: None
+- Files changed: work.json (review.l0), log.md (no source/test changes)
+- Build/Unit tests/Coverage: reused from the latest /unit-testing entry (47 + 76 passed); not re-run
+- Loop: 2/3 - TESTS_PASSED (unchanged); review.cycle 2/3
+- Next recommended command: /l1-review ALERT-410
+
+### 2026-10-06 - /l1-review - STAGE_PASSED
+- Summary: Re-review after the L1-F1 fix. AddTagsAsync stays in the repository layer, the unique NormalizedName index and AlertTags composite key remain the integrity guards, and a single bounded retry against fresh state makes concurrent POSTs idempotent instead of a 500; no API/schema/contract change. Retry-path tests (new-tag conflict, same-tag-same-alert conflict, persistent failure propagates) validate behavior and now pass; AC1-AC8 remain MET.
+- Findings: None (ALERT-410-L1-F1 resolved and verified; list replaced)
+- Observation (not a finding): the 10-tag limit is checked in the service before the write, so a concurrent writer could push an alert past 10 tags; pre-existing read-then-write design, out of scope for this story.
+- Files changed: work.json (review.l1, review.return_after_testing=false), log.md (no source/test changes)
+- Build/Unit tests/Coverage: reused from the latest /unit-testing entry (47 + 76 passed); not re-run
+- Loop: 2/3 - TESTS_PASSED (unchanged); review.cycle 2/3
+- Deferred: Human confirmation of POST status code, limit-exceeded status, orphan-tag cleanup
+- Next recommended command: None - review complete
