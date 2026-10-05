@@ -15,6 +15,7 @@ public interface IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = "createdDate",
         string sortDirection = "desc",
         int page = 1,
@@ -31,4 +32,13 @@ public interface IAlertRepository
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Links the given tag names to the alert, reusing existing global tags (matched
+    /// case-insensitively) and creating any that do not yet exist.
+    /// </summary>
+    Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> if the tag was assigned and removed, <c>false</c> if it was not assigned.</returns>
+    Task<bool> RemoveTagAsync(Alert alert, string tagName, CancellationToken cancellationToken = default);
 }

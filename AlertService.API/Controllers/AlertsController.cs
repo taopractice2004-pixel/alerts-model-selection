@@ -1,4 +1,5 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -85,5 +86,38 @@ public class AlertsController : ControllerBase
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>Adds one or more free-form tags to an alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddTagsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _alertService.AddTagsAsync(id, request, cancellationToken);
+
+        switch (result.Status)
+        {
+            case AddTagsStatus.AlertNotFound:
+                return NotFound();
+            case AddTagsStatus.TagLimitExceeded:
+                ModelState.AddModelError(
+                    nameof(AddTagsRequest.Tags),
+                    $"An alert cannot have more than {AlertConstants.MaxTagsPerAlert} tags.");
+                return ValidationProblem(ModelState);
+            default:
+                return Ok(result.Alert);
+        }
+    }
+
+    /// <summary>Removes a tag assignment from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return removed ? NoContent() : NotFound();
     }
 }

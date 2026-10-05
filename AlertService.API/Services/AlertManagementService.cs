@@ -1,4 +1,5 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -32,6 +33,7 @@ public class AlertManagementService : IAlertService
             request.CreatedFrom,
             request.CreatedTo,
             request.Search,
+            request.Tag,
             request.SortBy,
             request.SortDirection,
             request.Page,
@@ -142,5 +144,63 @@ public class AlertManagementService : IAlertService
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
+    }
+
+    public async Task<AddTagsResult> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return new AddTagsResult { Status = AddTagsStatus.AlertNotFound };
+        }
+
+        // Normalize the request: trim, drop blanks, and dedupe within the request case-insensitively.
+        var requestedTags = request.Tags
+            .Select(t => t?.Trim() ?? string.Empty)
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Keep only tags not already assigned to the alert (case-insensitive) so re-adding is a no-op.
+        var newTags = requestedTags
+            .Where(t => !alert.Tags.Any(existing => string.Equals(existing.Name, t, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        if (newTags.Count == 0)
+        {
+            return new AddTagsResult { Status = AddTagsStatus.Success, Alert = alert.ToResponse() };
+        }
+
+        if (alert.Tags.Count + newTags.Count > AlertConstants.MaxTagsPerAlert)
+        {
+            _logger.LogWarning("Rejected adding {Count} tags to alert {AlertId}: exceeds limit", newTags.Count, id);
+            return new AddTagsResult { Status = AddTagsStatus.TagLimitExceeded };
+        }
+
+        await _repository.AddTagsAsync(alert, newTags, cancellationToken);
+
+        _logger.LogInformation("Added {Count} tag(s) to alert {AlertId}", newTags.Count, id);
+        return new AddTagsResult { Status = AddTagsStatus.Success, Alert = alert.ToResponse() };
+    }
+
+    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot remove tag from alert {AlertId}: not found", id);
+            return false;
+        }
+
+        var removed = await _repository.RemoveTagAsync(alert, tag.Trim(), cancellationToken);
+        if (removed)
+        {
+            _logger.LogInformation("Removed tag from alert {AlertId}", id);
+        }
+
+        return removed;
     }
 }
