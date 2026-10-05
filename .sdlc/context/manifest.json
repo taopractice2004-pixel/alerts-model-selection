@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "stage": "setup-repo-context",
+  "generatedAtUtc": "2026-10-05T17:56:34.2957999Z",
+  "repositoryMode": "EXISTING_PROJECT",
+  "contextFiles": [
+    "manifest.json",
+    "project-profile.md",
+    "standards-summary.md"
+  ],
+  "detected": {
+    "technologies": [
+      "C#",
+      ".NET 8",
+      "ASP.NET Core Web API",
+      "Entity Framework Core 8",
+      "SQL Server",
+      "Serilog",
+      "Swagger/OpenAPI",
+      "xUnit",
+      "Moq"
+    ],
+    "sourceInputs": {
+      "requirementsDocs": [],
+      "rootDocs": [
+        "README.md"
+      ],
+      "buildFiles": [
+        "AlertService.sln",
+        "Directory.Build.props",
+        "dotnet-tools.json",
+        "AlertService.API/AlertService.API.csproj",
+        "AlertService.Data/AlertService.Data.csproj",
+        "AlertService.Data.SQL/AlertService.Data.SQL.csproj",
+        "AlertService.API.Tests/AlertService.API.Tests.csproj",
+        "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+      ],
+      "standards": [
+        "standards/api-rest-standards.md",
+        "standards/backend-dotnet-standards.md",
+        "standards/coding-standards.md",
+        "standards/database-standards.md",
+        "standards/frontend-react-standards.md",
+        "standards/service-architecture-standards.md",
+        "standards/ui-standards.md"
+      ],
+      "sampleSource": [
+        "AlertService.API/Program.cs",
+        "AlertService.API/Controllers/AlertsController.cs",
+        "AlertService.API/Services/AlertManagementService.cs",
+        "AlertService.Data/Interfaces/IAlertRepository.cs",
+        "AlertService.Data.SQL/AlertDbContext.cs"
+      ]
+    }
+  },
+  "exclusions": {
+    "excludedPaths": [
+      ".git/",
+      ".vs/",
+      "AlertService.API/Logs/"
+    ],
+    "excludedPatterns": [
+      "**/bin/",
+      "**/obj/",
+      "**/TestResults/"
+    ],
+    "reason": "Generated, dependency, build, cache, binary or runtime-noise content produced by this .NET 8 solution and its test projects should normally not be used as Copilot context.",
+    "notes": "Derived from .gitignore, the repository structure, and detected technologies. Never exclude normal source code, and never exclude config files (*.json, *.xml, *.yaml, *.yml, *.properties) solely by extension. Recalculate this section when repository structure, build outputs, or tooling change materially."
+  },
+  "standards": {
+    "note": "Routing index only; no rule text. Stages record relevant ids in work.json 'selected_standards'. Compact rules auto-apply via the instruction files (applyTo). Full source files are read only when an exact rule or missing detail is required.",
+    "items": [
+      {
+        "id": "coding",
+        "name": "Global Coding Standards",
+        "source_file": "standards/coding-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/coding.instructions.md",
+        "applies_to": "**/*.cs,**/*.ts,**/*.tsx,**/*.js,**/*.jsx,**/*.sql",
+        "scope": "global",
+        "priority": "global"
+      },
+      {
+        "id": "backend-dotnet",
+        "name": "Backend .NET Standards",
+        "source_file": "standards/backend-dotnet-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/backend-dotnet.instructions.md",
+        "applies_to": "**/*.cs,**/*.csproj",
+        "scope": "backend",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "api-rest",
+        "name": "REST API Standards",
+        "source_file": "standards/api-rest-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/api-rest.instructions.md",
+        "applies_to": "**/*Controller.cs,**/openapi*.yaml,**/openapi*.yml,**/swagger*.yaml,**/swagger*.yml,**/*.openapi.yaml,**/*.openapi.yml",
+        "scope": "api-contract",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "database",
+        "name": "Database Standards",
+        "source_file": "standards/database-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/database.instructions.md",
+        "applies_to": "**/*.sql,**/Migrations/**,**/*DbContext.cs,**/*Repository.cs",
+        "scope": "database",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "service-architecture",
+        "name": "Service Architecture Standards",
+        "source_file": "standards/service-architecture-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/service-architecture.instructions.md",
+        "applies_to": "**/*Service.cs,**/*Client.cs,**/Program.cs,**/Startup.cs",
+        "scope": "service-architecture",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "frontend-react",
+        "name": "Frontend React Standards",
+        "source_file": "standards/frontend-react-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/frontend-react.instructions.md",
+        "applies_to": "**/*.tsx,**/*.jsx,**/*.ts,**/*.js",
+        "scope": "frontend",
+        "priority": "conditional"
+      },
+      {
+        "id": "ui",
+        "name": "UI Standards",
+        "source_file": "standards/ui-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/ui.instructions.md",
+        "applies_to": "**/*.html,**/*.css,**/*.scss",
+        "scope": "ui-markup-styling",
+        "priority": "conditional"
+      }
+    ]
+  },
+  "notes": "Repository cache derived from the current AlertService solution. Re-run /refresh-repo-context when standards, build/test commands, documentation, or major repository structure change."
+}

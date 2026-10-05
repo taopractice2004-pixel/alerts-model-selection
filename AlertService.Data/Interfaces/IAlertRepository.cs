@@ -15,6 +15,7 @@ public interface IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = "createdDate",
         string sortDirection = "desc",
         int page = 1,
@@ -28,7 +29,11 @@ public interface IAlertRepository
 
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
 
+    Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
+
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default);
 }

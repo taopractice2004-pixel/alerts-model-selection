@@ -35,7 +35,8 @@ public class AlertsControllerTests
         Description = "85% used",
         Severity = Severity.High,
         CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-        IsActive = true
+        IsActive = true,
+        Tags = new List<string> { "ops" }
     };
 
     [Fact]
@@ -66,7 +67,8 @@ public class AlertsControllerTests
             PageSize = 10,
             SortBy = "title",
             SortDirection = "asc",
-            Search = "disk"
+            Search = "disk",
+            Tag = "ops"
         };
         _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse(SampleResponse(1)));
 
@@ -103,7 +105,8 @@ public class AlertsControllerTests
             PageSize = 101,
             SortBy = "status",
             SortDirection = "sideways",
-            Search = new string('x', 201)
+            Search = new string('x', 201),
+            Tag = " "
         };
 
         var context = new ValidationContext(request);
@@ -117,6 +120,28 @@ public class AlertsControllerTests
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.SortBy)));
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.SortDirection)));
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Search)));
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithInvalidTags_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest
+        {
+            Tags = new List<string>
+            {
+                "   ",
+                new string('x', 31)
+            }
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Equal(2, results.Count(r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags))));
     }
 
     [Theory]
@@ -223,6 +248,60 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task AddTags_WhenSuccessful_ReturnsOkWithUpdatedAlert()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops", "security" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTagAddResult
+        {
+            Alert = new AlertResponse
+            {
+                Id = 1,
+                Title = "Disk usage high",
+                Severity = Severity.High,
+                CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                IsActive = true,
+                Tags = new List<string> { "ops", "security" }
+            }
+        });
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "ops", "security" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops" } };
+        _service.Setup(s => s.AddTagsAsync(42, request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTagAddResult
+        {
+            AlertNotFound = true
+        });
+
+        var result = await _controller.AddTags(42, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenValidationFails_ReturnsValidationProblem()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTagAddResult
+        {
+            ValidationError = "An alert can have at most 10 tags."
+        });
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result);
+        Assert.Contains(nameof(request.Tags), _controller.ModelState.Keys);
+        Assert.Contains(_controller.ModelState[nameof(request.Tags)]!.Errors, error => error.ErrorMessage == "An alert can have at most 10 tags.");
+    }
+
+    [Fact]
     public async Task Update_WhenFound_ReturnsOk()
     {
         var request = new UpdateAlertRequest { Title = "Updated", Severity = Severity.Low, IsActive = false };
@@ -282,5 +361,39 @@ public class AlertsControllerTests
         var result = await _controller.Delete(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteTag_WhenFound_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.DeleteTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteTag_WhenMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.DeleteTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData("1234567890123456789012345678901")]
+    public async Task DeleteTag_WithInvalidTag_ReturnsValidationProblem(string tag)
+    {
+        var result = await _controller.DeleteTag(1, tag, CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
+        Assert.Contains("tag", _controller.ModelState.Keys);
+        Assert.NotEmpty(_controller.ModelState["tag"]!.Errors);
+        _service.Verify(s => s.RemoveTagAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

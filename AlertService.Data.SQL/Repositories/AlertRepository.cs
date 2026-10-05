@@ -21,6 +21,7 @@ public class AlertRepository : IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
@@ -55,10 +56,16 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
         }
 
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            query = query.Where(a => a.Tags.Any(alertTag => alertTag.Name == tag));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
+            .Include(a => a.Tags)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -124,7 +131,9 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -132,6 +141,47 @@ public class AlertRepository : IAlertRepository
         await _context.Alerts.AddAsync(alert, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return alert;
+    }
+
+    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        if (tags.Count == 0)
+        {
+            return;
+        }
+
+        await _context.Entry(alert).Collection(a => a.Tags).LoadAsync(cancellationToken);
+
+        var existingTags = await _context.Tags
+            .Where(tag => tags.Contains(tag.Name))
+            .ToListAsync(cancellationToken);
+
+        var existingTagsByName = existingTags.ToDictionary(tag => tag.Name, StringComparer.Ordinal);
+        var assignedTagNames = alert.Tags
+            .Select(tag => tag.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var tagName in tags)
+        {
+            if (assignedTagNames.Contains(tagName))
+            {
+                continue;
+            }
+
+            if (!existingTagsByName.TryGetValue(tagName, out var tagEntity))
+            {
+                tagEntity = new Tag
+                {
+                    Name = tagName
+                };
+                existingTagsByName[tagName] = tagEntity;
+            }
+
+            alert.Tags.Add(tagEntity);
+            assignedTagNames.Add(tagName);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -144,5 +194,35 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _context.Alerts
+            .Include(a => a.Tags)
+            .ThenInclude(alertTag => alertTag.Alerts)
+            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
+
+        if (alert is null)
+        {
+            return false;
+        }
+
+        var tagEntity = alert.Tags.FirstOrDefault(alertTag => alertTag.Name == tag);
+        if (tagEntity is null)
+        {
+            return false;
+        }
+
+        var deleteTagEntity = tagEntity.Alerts.Count == 1;
+        alert.Tags.Remove(tagEntity);
+
+        if (deleteTagEntity)
+        {
+            _context.Tags.Remove(tagEntity);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

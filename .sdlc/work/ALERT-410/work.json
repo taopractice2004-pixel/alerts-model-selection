@@ -1,0 +1,129 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add free-form alert tagging with tag assignment endpoints, tag filtering, response projection, and relational schema support.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "Introduce a Tag concept with a many-to-many relationship to Alert, including the required persistence model and database migration artifacts."
+    },
+    {
+      "id": "AC2",
+      "text": "POST /api/alerts/{id}/tags adds one or more tags for an existing alert, dedupes case-insensitively, enforces at most 10 tags per alert, and enforces each tag length to 1 through 30 characters."
+    },
+    {
+      "id": "AC3",
+      "text": "DELETE /api/alerts/{id}/tags/{tag} removes a tag assignment and returns 404 when the alert does not exist or the tag is not assigned to that alert."
+    },
+    {
+      "id": "AC4",
+      "text": "GET /api/alerts supports an optional tag query filter that composes with the existing isActive, severity, created date range, and search filters."
+    },
+    {
+      "id": "AC5",
+      "text": "AlertResponse includes the alert's tags so tag assignments are visible in list and detail responses."
+    }
+  ],
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs"
+  ],
+  "exact_source_files": [
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertTagAddResult.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.Data.SQL/AlertDbContext.cs",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs",
+    "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+    "AlertService.Data.SQL/Migrations/* (new)",
+    "AlertService.DTO/Requests/AddAlertTagsRequest.cs",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs",
+    "AlertService.Models/Alert.cs",
+    "AlertService.Models/Tag.cs (new)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs",
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.DTO/Requests/CreateAlertRequest.cs",
+    "AlertService.DTO/Requests/UpdateAlertRequest.cs",
+    "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Keep the existing layered seam intact: controller -> service -> repository; controllers and services should continue working with DTOs instead of EF entities.",
+    "Normalize tag comparisons case-insensitively for assignment, removal, and filtering while preserving a deterministic returned tag shape.",
+    "Respect repository-wide existing filter composition and avoid regressing current paging, sorting, and search behavior on GET /api/alerts.",
+    "Fit the tag schema into the current EF Core SQL Server model and checked-in migration workflow."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "coverage_goals": [
+    "Behavior coverage for tag validation, case-insensitive dedupe, and max-10 enforcement on tag assignment.",
+    "Behavior coverage for tag removal not-found paths and successful removal.",
+    "Behavior coverage for GET /api/alerts tag filter composition with existing repository filters and AlertResponse tag projection."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "IMPLEMENTATION",
+    "return_after_testing": false,
+    "l0": {
+      "status": "NOT_STARTED",
+      "findings": []
+    },
+    "l1": {
+      "status": "NOT_STARTED",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

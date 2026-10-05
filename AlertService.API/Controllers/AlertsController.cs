@@ -1,4 +1,5 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -56,6 +57,28 @@ public class AlertsController : ControllerBase
         return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
     }
 
+    /// <summary>Adds one or more tags to an existing alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _alertService.AddTagsAsync(id, request, cancellationToken);
+        if (result.AlertNotFound)
+        {
+            return NotFound();
+        }
+
+        if (!string.IsNullOrEmpty(result.ValidationError))
+        {
+            ModelState.AddModelError(nameof(request.Tags), result.ValidationError);
+            return ValidationProblem(ModelState);
+        }
+
+        return Ok(result.Alert);
+    }
+
     /// <summary>Updates an existing alert.</summary>
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
@@ -84,6 +107,23 @@ public class AlertsController : ControllerBase
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
+        return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>Removes a tag assignment from an existing alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || tag.Trim().Length > AlertConstants.TagMaxLength)
+        {
+            ModelState.AddModelError(nameof(tag), $"Tag values must be between 1 and {AlertConstants.TagMaxLength} characters after trimming.");
+            return ValidationProblem(ModelState);
+        }
+
+        var deleted = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
 }

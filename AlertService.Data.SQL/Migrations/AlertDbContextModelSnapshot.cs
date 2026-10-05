@@ -56,6 +56,83 @@ namespace AlertService.Data.SQL.Migrations
 
                     b.ToTable("Alerts", (string)null);
                 });
+
+            modelBuilder.Entity("AlertService.Models.Tag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertTags", b =>
+                {
+                    b.Property<int>("AlertId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AlertId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("AlertTags", (string)null);
+                });
+
+            modelBuilder.Entity("AlertTags", b =>
+                {
+                    b.HasOne("AlertService.Models.Alert", null)
+                        .WithMany()
+                        .HasForeignKey("AlertId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AlertService.Models.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AlertService.Models.Alert", b =>
+                {
+                    b.HasMany("AlertService.Models.Tag", "Tags")
+                        .WithMany("Alerts")
+                        .UsingEntity(
+                            "AlertTags",
+                            r => r.HasOne("AlertService.Models.Tag").WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade).IsRequired(),
+                            l => l.HasOne("AlertService.Models.Alert").WithMany().HasForeignKey("AlertId").OnDelete(DeleteBehavior.Cascade).IsRequired(),
+                            j =>
+                            {
+                                j.HasKey("AlertId", "TagId");
+                                j.ToTable("AlertTags", (string)null);
+                                j.HasIndex(new[] { "TagId" });
+                            });
+                });
+
+            modelBuilder.Entity("AlertService.Models.Tag", b =>
+                {
+                    b.Navigation("Alerts");
+                });
+
+            modelBuilder.Entity("AlertService.Models.Alert", b =>
+                {
+                    b.Navigation("Tags");
+                });
 #pragma warning restore 612, 618
         }
     }

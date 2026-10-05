@@ -33,13 +33,19 @@ public class AlertManagementServiceTests
         Description = "Heap growing",
         Severity = Severity.Medium,
         CreatedDate = FixedNow.UtcDateTime.AddDays(-1),
-        IsActive = true
+        IsActive = true,
+        Tags = new List<Tag>()
     };
 
     [Fact]
     public async Task GetAllAsync_MapsEntitiesToPagedResponse()
     {
+        var first = ExistingAlert(1);
+        first.Tags.Add(new Tag { Name = "zeta" });
+        first.Tags.Add(new Tag { Name = "alpha" });
+
         _repository.Setup(r => r.GetAllAsync(
+                null,
                 null,
                 null,
                 null,
@@ -50,7 +56,7 @@ public class AlertManagementServiceTests
                 1,
                 20,
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<Alert> { ExistingAlert(1), ExistingAlert(2) }, 2));
+            .ReturnsAsync((new List<Alert> { first, ExistingAlert(2) }, 2));
 
         var result = await _service.GetAllAsync(new AlertQueryRequest());
 
@@ -58,6 +64,7 @@ public class AlertManagementServiceTests
         Assert.Equal(new[] { 1, 2 }, result.Items.Select(r => r.Id));
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(1, result.TotalPages);
+        Assert.Equal(new[] { "alpha", "zeta" }, result.Items[0].Tags);
     }
 
     [Fact]
@@ -70,17 +77,18 @@ public class AlertManagementServiceTests
             CreatedFrom = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
             CreatedTo = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
             Search = "disk",
+            Tag = " Ops ",
             SortBy = "title",
             SortDirection = "asc",
             Page = 2,
             PageSize = 10
         };
-        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "ops", "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Alert> { ExistingAlert(1) }, 11));
 
         var result = await _service.GetAllAsync(request);
 
-        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "ops", "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(2, result.Page);
         Assert.Equal(10, result.PageSize);
         Assert.Equal(11, result.TotalCount);
@@ -88,15 +96,110 @@ public class AlertManagementServiceTests
     }
 
     [Fact]
+    public async Task AddTagsAsync_WhenNoUsableTags_ReturnsValidationError()
+    {
+        var result = await _service.AddTagsAsync(1, new AddAlertTagsRequest
+        {
+            Tags = new List<string> { " ", "\t" }
+        });
+
+        Assert.Equal("At least one tag is required.", result.ValidationError);
+        Assert.False(result.AlertNotFound);
+        _repository.Verify(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<Alert>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenAlertMissing_ReturnsNotFoundResult()
+    {
+        _repository.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync((Alert?)null);
+
+        var result = await _service.AddTagsAsync(99, new AddAlertTagsRequest
+        {
+            Tags = new List<string> { "ops" }
+        });
+
+        Assert.True(result.AlertNotFound);
+        Assert.Null(result.Alert);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<Alert>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_DedupesCaseInsensitively_AndReturnsUpdatedResponse()
+    {
+        var existing = ExistingAlert();
+        existing.Tags.Add(new Tag { Name = "ops" });
+        IReadOnlyCollection<string>? savedTags = null;
+
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _repository.Setup(r => r.AddTagsAsync(existing, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Callback<Alert, IReadOnlyCollection<string>, CancellationToken>((alert, tags, _) =>
+            {
+                savedTags = tags;
+                foreach (var tag in tags.Where(tag => alert.Tags.All(existingTag => existingTag.Name != tag)))
+                {
+                    alert.Tags.Add(new Tag { Name = tag });
+                }
+            })
+            .Returns(Task.CompletedTask);
+
+        var result = await _service.AddTagsAsync(1, new AddAlertTagsRequest
+        {
+            Tags = new List<string> { " Ops ", "SECURITY", "security", "ops" }
+        });
+
+        Assert.NotNull(savedTags);
+        Assert.Equal(new[] { "ops", "security" }, savedTags);
+        Assert.NotNull(result.Alert);
+        Assert.Equal(new[] { "ops", "security" }, result.Alert!.Tags);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenTotalUniqueTagsExceedsLimit_ReturnsValidationError()
+    {
+        var existing = ExistingAlert();
+        foreach (var name in Enumerable.Range(1, 9).Select(index => $"tag-{index}"))
+        {
+            existing.Tags.Add(new Tag { Name = name });
+        }
+
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+
+        var result = await _service.AddTagsAsync(1, new AddAlertTagsRequest
+        {
+            Tags = new List<string> { "tag-10", "tag-11" }
+        });
+
+        Assert.Equal("An alert can have at most 10 tags.", result.ValidationError);
+        Assert.Null(result.Alert);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<Alert>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_NormalizesTagBeforeRemoving()
+    {
+        _repository.Setup(r => r.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _service.RemoveTagAsync(1, " Ops ");
+
+        Assert.True(result);
+        _repository.Verify(r => r.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsResponse()
     {
-        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(ExistingAlert());
+        var existing = ExistingAlert();
+        existing.Tags.Add(new Tag { Name = "zeta" });
+        existing.Tags.Add(new Tag { Name = "alpha" });
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
 
         var result = await _service.GetByIdAsync(1);
 
         Assert.NotNull(result);
         Assert.Equal("Memory leak", result!.Title);
         Assert.Equal(Severity.Medium, result.Severity);
+        Assert.Equal(new[] { "alpha", "zeta" }, result.Tags);
     }
 
     [Fact]
