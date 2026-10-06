@@ -14,6 +14,8 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AlertTrendBucketResponse>> GetTrendsAsync(AlertTrendQueryRequest request, CancellationToken cancellationToken = default);
+
     Task<(AlertResponse Alert, bool DuplicateSuppressed)> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     Task<AlertTagAddResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default);

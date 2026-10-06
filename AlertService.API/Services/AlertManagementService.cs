@@ -88,6 +88,43 @@ public class AlertManagementService : IAlertService
         };
     }
 
+    public async Task<IReadOnlyList<AlertTrendBucketResponse>> GetTrendsAsync(AlertTrendQueryRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var todayUtc = _timeProvider.GetUtcNow().UtcDateTime.Date;
+        var startDateUtc = todayUtc.AddDays(1 - request.Days);
+        var endDateExclusiveUtc = todayUtc.AddDays(1);
+        var storedBuckets = await _repository.GetDailyTrendsAsync(startDateUtc, endDateExclusiveUtc, cancellationToken);
+        var bucketsByDate = storedBuckets.ToDictionary(bucket => DateOnly.FromDateTime(bucket.Date));
+        var trends = new List<AlertTrendBucketResponse>(request.Days);
+
+        for (var offset = 0; offset < request.Days; offset++)
+        {
+            var bucketDate = DateOnly.FromDateTime(startDateUtc.AddDays(offset));
+            if (bucketsByDate.TryGetValue(bucketDate, out var bucket))
+            {
+                trends.Add(new AlertTrendBucketResponse
+                {
+                    Date = bucketDate,
+                    TotalCount = bucket.TotalCount,
+                    SeverityCounts = MapSeverityCounts(bucket.LowCount, bucket.MediumCount, bucket.HighCount, bucket.CriticalCount)
+                });
+
+                continue;
+            }
+
+            trends.Add(new AlertTrendBucketResponse
+            {
+                Date = bucketDate,
+                TotalCount = 0,
+                SeverityCounts = MapSeverityCounts(0, 0, 0, 0)
+            });
+        }
+
+        return trends;
+    }
+
     public async Task<(AlertResponse Alert, bool DuplicateSuppressed)> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -259,6 +296,17 @@ public class AlertManagementService : IAlertService
     private static string NormalizeTag(string tag)
     {
         return tag.Trim().ToLowerInvariant();
+    }
+
+    private static AlertSeverityCountsResponse MapSeverityCounts(int lowCount, int mediumCount, int highCount, int criticalCount)
+    {
+        return new AlertSeverityCountsResponse
+        {
+            Low = lowCount,
+            Medium = mediumCount,
+            High = highCount,
+            Critical = criticalCount
+        };
     }
 
     private int GetDuplicateSuppressionWindowMinutes()

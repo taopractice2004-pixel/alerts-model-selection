@@ -96,6 +96,32 @@ public class AlertRepository : IAlertRepository
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
     }
 
+    public async Task<IReadOnlyList<(DateTime Date, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>> GetDailyTrendsAsync(
+        DateTime startDateUtc,
+        DateTime endDateExclusiveUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var dailyBuckets = await _context.Alerts
+            .AsNoTracking()
+            .Where(alert => alert.CreatedDate >= startDateUtc && alert.CreatedDate < endDateExclusiveUtc)
+            .GroupBy(alert => alert.CreatedDate.Date)
+            .Select(group => new
+            {
+                Date = group.Key,
+                TotalCount = group.Count(),
+                LowCount = group.Count(alert => alert.Severity == Severity.Low),
+                MediumCount = group.Count(alert => alert.Severity == Severity.Medium),
+                HighCount = group.Count(alert => alert.Severity == Severity.High),
+                CriticalCount = group.Count(alert => alert.Severity == Severity.Critical)
+            })
+            .OrderBy(bucket => bucket.Date)
+            .ToListAsync(cancellationToken);
+
+        return dailyBuckets
+            .Select(bucket => (bucket.Date, bucket.TotalCount, bucket.LowCount, bucket.MediumCount, bucket.HighCount, bucket.CriticalCount))
+            .ToList();
+    }
+
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
     {
         var normalizedSortBy = sortBy.Trim();

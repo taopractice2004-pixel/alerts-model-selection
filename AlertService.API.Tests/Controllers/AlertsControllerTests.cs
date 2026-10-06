@@ -257,6 +257,64 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithTypedBuckets()
+    {
+        var request = new AlertTrendQueryRequest { Days = 3 };
+        var trends = new List<AlertTrendBucketResponse>
+        {
+            new()
+            {
+                Date = new DateOnly(2026, 8, 30),
+                TotalCount = 2,
+                SeverityCounts = new AlertSeverityCountsResponse
+                {
+                    Low = 1,
+                    Medium = 0,
+                    High = 1,
+                    Critical = 0
+                }
+            }
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(trends);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsAssignableFrom<IReadOnlyList<AlertTrendBucketResponse>>(ok.Value);
+        Assert.Single(body);
+        Assert.Equal(new DateOnly(2026, 8, 30), body[0].Date);
+        Assert.Equal(1, body[0].SeverityCounts.Low);
+        Assert.Equal(1, body[0].SeverityCounts.High);
+    }
+
+    [Fact]
+    public void AlertTrendQueryRequest_UsesSevenDayDefault()
+    {
+        var request = new AlertTrendQueryRequest();
+
+        Assert.Equal(7, request.Days);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(91)]
+    public void AlertTrendQueryRequest_WithOutOfRangeDays_FailsValidation(int days)
+    {
+        var request = new AlertTrendQueryRequest
+        {
+            Days = days
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, result => result.MemberNames.Contains(nameof(AlertTrendQueryRequest.Days)));
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
