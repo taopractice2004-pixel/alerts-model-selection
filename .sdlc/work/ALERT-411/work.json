@@ -1,0 +1,122 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "standalone",
+  "tracker": "",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add configurable duplicate-alert suppression for POST /api/alerts using a 15-minute active-alert window by title and severity.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "POST /api/alerts suppresses creation when an active alert exists with the same title (case-insensitive) and same severity, and the existing alert was created within the configured suppression window."
+    },
+    {
+      "id": "AC2",
+      "text": "When suppression occurs, API returns 200 OK with the existing alert payload and response header X-Duplicate-Suppressed: true."
+    },
+    {
+      "id": "AC3",
+      "text": "When no suppressible duplicate exists, API keeps normal create behavior and returns 201 Created with CreatedAtRoute."
+    },
+    {
+      "id": "AC4",
+      "text": "Suppression does not apply when severity differs or when prior matching alert is inactive."
+    },
+    {
+      "id": "AC5",
+      "text": "Suppression window minutes are configurable from appsettings.json and not hardcoded in code paths."
+    }
+  ],
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs::Create",
+    "AlertService.API/Services/IAlertService.cs::CreateAsync",
+    "AlertService.API/Services/AlertManagementService.cs::CreateAsync",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json",
+    "AlertService.DTO/Responses/AlertResponse.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs",
+    "AlertService.DTO/Responses/AlertResponse.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "No unrelated refactoring outside duplicate suppression behavior for POST /api/alerts.",
+    "Duplicate match must be case-insensitive for title and exact match for severity.",
+    "Suppression candidate must be active and within configured time window based on CreatedDate.",
+    "Suppression response must include X-Duplicate-Suppressed: true and HTTP 200.",
+    "Normal creation path must remain 201 Created when no suppressible duplicate exists.",
+    "Suppression window must come from appsettings configuration, not literals in runtime logic."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --collect:\"XPlat Code Coverage\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage for duplicate-suppressed POST returning 200 and suppression header.",
+    "Behavior coverage for normal POST create path returning 201 when no duplicate exists.",
+    "Behavior coverage for non-suppression cases (inactive prior alert, different severity, outside window).",
+    "Behavior coverage for repository duplicate lookup with case-insensitive title match and time window boundary."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "NOT_STARTED",
+      "findings": []
+    },
+    "l1": {
+      "status": "NOT_STARTED",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [
+    "When multiple active duplicates match within the window, should suppression return the newest match, oldest match, or any deterministic match?"
+  ]
+}

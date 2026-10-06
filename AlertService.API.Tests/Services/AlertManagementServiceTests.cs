@@ -5,6 +5,7 @@ using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using AlertService.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
@@ -21,9 +22,18 @@ public class AlertManagementServiceTests
     public AlertManagementServiceTests()
     {
         _timeProvider.Setup(t => t.GetUtcNow()).Returns(FixedNow);
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AlertSuppression:DuplicateWindowMinutes"] = "15"
+            })
+            .Build();
+
         _service = new AlertManagementService(
             _repository.Object,
             _timeProvider.Object,
+            configuration,
             NullLogger<AlertManagementService>.Instance);
     }
 
@@ -210,7 +220,80 @@ public class AlertManagementServiceTests
         Assert.Equal(FixedNow.UtcDateTime, saved.CreatedDate);
         Assert.Equal(10, result.Id);
         Assert.Equal(Severity.Critical, result.Severity);
+        Assert.False(result.IsDuplicateSuppressed);
         _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenDuplicateExists_ReturnsSuppressedExistingAlert_AndDoesNotCreate()
+    {
+        var duplicate = ExistingAlert(7);
+        DateTime? capturedCreatedAfter = null;
+
+        _repository.Setup(r => r.GetActiveDuplicateByTitleAndSeverityAsync(
+                It.IsAny<string>(),
+                It.IsAny<Severity>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, Severity, DateTime, CancellationToken>((_, _, createdAfterUtc, _) => capturedCreatedAfter = createdAfterUtc)
+            .ReturnsAsync(duplicate);
+
+        var request = new CreateAlertRequest
+        {
+            Title = "memory LEAK",
+            Description = "different payload should be ignored when duplicate exists",
+            Severity = Severity.Medium,
+            IsActive = true
+        };
+
+        var result = await _service.CreateAsync(request);
+
+        Assert.Equal(7, result.Id);
+        Assert.Equal("Memory leak", result.Title);
+        Assert.True(result.IsDuplicateSuppressed);
+        Assert.Equal(FixedNow.UtcDateTime.AddMinutes(-15), capturedCreatedAfter);
+        _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UsesConfiguredDuplicateWindowMinutes()
+    {
+        var customConfiguration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AlertSuppression:DuplicateWindowMinutes"] = "45"
+            })
+            .Build();
+
+        var service = new AlertManagementService(
+            _repository.Object,
+            _timeProvider.Object,
+            customConfiguration,
+            NullLogger<AlertManagementService>.Instance);
+
+        DateTime? capturedCreatedAfter = null;
+        _repository.Setup(r => r.GetActiveDuplicateByTitleAndSeverityAsync(
+                It.IsAny<string>(),
+                It.IsAny<Severity>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, Severity, DateTime, CancellationToken>((_, _, createdAfterUtc, _) => capturedCreatedAfter = createdAfterUtc)
+            .ReturnsAsync((Alert?)null);
+
+        _repository.Setup(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Alert alert, CancellationToken _) =>
+            {
+                alert.Id = 88;
+                return alert;
+            });
+
+        _ = await service.CreateAsync(new CreateAlertRequest
+        {
+            Title = "Memory leak",
+            Severity = Severity.Medium
+        });
+
+        Assert.Equal(FixedNow.UtcDateTime.AddMinutes(-45), capturedCreatedAfter);
     }
 
     [Fact]

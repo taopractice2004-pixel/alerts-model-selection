@@ -3,6 +3,7 @@ using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.Extensions.Configuration;
 
 namespace AlertService.API.Services;
 
@@ -11,16 +12,27 @@ public class AlertManagementService : IAlertService
 {
     private readonly IAlertRepository _repository;
     private readonly TimeProvider _timeProvider;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AlertManagementService> _logger;
 
     public AlertManagementService(
         IAlertRepository repository,
         TimeProvider timeProvider,
+        IConfiguration configuration,
         ILogger<AlertManagementService> logger)
     {
         _repository = repository;
         _timeProvider = timeProvider;
+        _configuration = configuration;
         _logger = logger;
+    }
+
+    public AlertManagementService(
+        IAlertRepository repository,
+        TimeProvider timeProvider,
+        ILogger<AlertManagementService> logger)
+        : this(repository, timeProvider, new ConfigurationManager(), logger)
+    {
     }
 
     public async Task<PagedResponse<AlertResponse>> GetAllAsync(AlertQueryRequest request, CancellationToken cancellationToken = default)
@@ -85,7 +97,33 @@ public class AlertManagementService : IAlertService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);
+        var duplicateWindowMinutes = _configuration.GetValue<int?>("AlertSuppression:DuplicateWindowMinutes");
+        if (duplicateWindowMinutes is null or <= 0)
+        {
+            throw new InvalidOperationException("AlertSuppression:DuplicateWindowMinutes must be configured as a positive integer.");
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var createdAfterUtc = nowUtc.AddMinutes(-duplicateWindowMinutes.Value);
+        var duplicate = await _repository.GetActiveDuplicateByTitleAndSeverityAsync(
+            request.Title,
+            request.Severity,
+            createdAfterUtc,
+            cancellationToken);
+
+        if (duplicate is not null)
+        {
+            _logger.LogInformation(
+                "Suppressed duplicate alert creation. Existing alert {AlertId} matched title and severity within {WindowMinutes} minutes.",
+                duplicate.Id,
+                duplicateWindowMinutes.Value);
+
+            var duplicateResponse = duplicate.ToResponse();
+            duplicateResponse.IsDuplicateSuppressed = true;
+            return duplicateResponse;
+        }
+
+        var alert = request.ToEntity(nowUtc);
         var created = await _repository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation("Created alert {AlertId} with severity {Severity}", created.Id, created.Severity);

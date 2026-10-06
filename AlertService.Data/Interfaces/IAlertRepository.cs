@@ -39,6 +39,12 @@ public interface IAlertRepository
 
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<Alert?> GetActiveDuplicateByTitleAndSeverityAsync(
+        string title,
+        Severity severity,
+        DateTime createdAfterUtc,
+        CancellationToken cancellationToken = default);
+
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default);

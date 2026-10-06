@@ -48,11 +48,19 @@ public class AlertsController : ControllerBase
 
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
         var created = await _alertService.CreateAsync(request, cancellationToken);
+
+        if (created.IsDuplicateSuppressed)
+        {
+            Response.Headers.Append("X-Duplicate-Suppressed", "true");
+            return Ok(created);
+        }
+
         return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
     }
 

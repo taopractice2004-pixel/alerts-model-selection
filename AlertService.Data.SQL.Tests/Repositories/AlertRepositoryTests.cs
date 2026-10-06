@@ -332,6 +332,37 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetActiveDuplicateByTitleAndSeverityAsync_ReturnsNewestActiveMatchWithinWindow_CaseInsensitiveTitle()
+    {
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, new DateTime(2026, 1, 1, 8, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("MEMORY LEAK", Severity.High, new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("memory leak", Severity.High, new DateTime(2026, 1, 1, 6, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        var duplicate = await _repository.GetActiveDuplicateByTitleAndSeverityAsync(
+            title: "MeMoRy LeAk",
+            severity: Severity.High,
+            createdAfterUtc: new DateTime(2026, 1, 1, 7, 0, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(duplicate);
+        Assert.Equal(new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc), duplicate!.CreatedDate);
+    }
+
+    [Fact]
+    public async Task GetActiveDuplicateByTitleAndSeverityAsync_IgnoresInactiveDifferentSeverityAndOutsideWindow()
+    {
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.Medium, new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, new DateTime(2026, 1, 1, 6, 59, 59, DateTimeKind.Utc), isActive: true));
+
+        var duplicate = await _repository.GetActiveDuplicateByTitleAndSeverityAsync(
+            title: "memory leak",
+            severity: Severity.High,
+            createdAfterUtc: new DateTime(2026, 1, 1, 7, 0, 0, DateTimeKind.Utc));
+
+        Assert.Null(duplicate);
+    }
+
+    [Fact]
     public async Task UpdateAsync_PersistsChanges()
     {
         var added = await _repository.AddAsync(NewAlert());

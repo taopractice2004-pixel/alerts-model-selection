@@ -16,5 +16,7 @@ public class AlertResponse
 
     public bool IsActive { get; set; }
 
+    public bool IsDuplicateSuppressed { get; set; }
+
     public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
 }
