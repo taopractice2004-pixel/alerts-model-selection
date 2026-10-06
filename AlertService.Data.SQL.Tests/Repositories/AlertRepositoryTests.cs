@@ -43,6 +43,98 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task FindRecentDuplicateAsync_WhenActiveMatchWithinWindow_ReturnsAlert()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, created, isActive: true));
+
+        var result = await _repository.FindRecentDuplicateAsync("Memory leak", Severity.High, created.AddMinutes(-15));
+
+        Assert.NotNull(result);
+        Assert.Equal("Memory leak", result!.Title);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_MatchesTitleCaseInsensitively_AndTrimsInput()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, created));
+
+        var result = await _repository.FindRecentDuplicateAsync("  DISK FULL  ", Severity.Medium, created.AddMinutes(-15));
+
+        Assert.NotNull(result);
+        Assert.Equal("Disk full", result!.Title);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_WhenSeverityDiffers_ReturnsNull()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, created));
+
+        var result = await _repository.FindRecentDuplicateAsync("Disk full", Severity.High, created.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_WhenMatchIsInactive_ReturnsNull()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, created, isActive: false));
+
+        var result = await _repository.FindRecentDuplicateAsync("Disk full", Severity.Medium, created.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_WhenMatchOlderThanCutoff_ReturnsNull()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, created));
+
+        // Cutoff is one minute after the alert was created, so it falls outside the window.
+        var result = await _repository.FindRecentDuplicateAsync("Disk full", Severity.Medium, created.AddMinutes(1));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_WhenCreatedExactlyAtCutoff_ReturnsAlert()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, created));
+
+        var result = await _repository.FindRecentDuplicateAsync("Disk full", Severity.Medium, created);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_WhenMultipleMatches_ReturnsMostRecent()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, new DateTime(2026, 5, 1, 12, 30, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.FindRecentDuplicateAsync("Disk full", Severity.Medium, new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(result);
+        Assert.Equal(new DateTime(2026, 5, 1, 12, 30, 0, DateTimeKind.Utc), result!.CreatedDate);
+    }
+
+    [Fact]
+    public async Task FindRecentDuplicateAsync_WhenNoMatchingTitle_ReturnsNull()
+    {
+        var created = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Medium, created));
+
+        var result = await _repository.FindRecentDuplicateAsync("CPU spike", Severity.Medium, created.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public async Task GetAllAsync_ReturnsAlerts_NewestFirst()
     {
         await _repository.AddAsync(NewAlert("Older", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));

@@ -27,6 +27,13 @@ public interface IAlertRepository
 
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Finds the most recently created active alert with a matching title (case-insensitive)
+    /// and severity created at or after <paramref name="createdAfterUtc"/>, used for
+    /// near-duplicate suppression. Returns <c>null</c> when no such alert exists.
+    /// </summary>
+    Task<Alert?> FindRecentDuplicateAsync(string title, Severity severity, DateTime createdAfterUtc, CancellationToken cancellationToken = default);
+
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);

@@ -14,7 +14,12 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Creates an alert, or suppresses it when it is a near-duplicate of a recent active alert.
+    /// The result's <see cref="CreateAlertResult.Status"/> tells the controller whether to return
+    /// 201 Created or a 200 OK duplicate-suppressed response.
+    /// </summary>
+    Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);

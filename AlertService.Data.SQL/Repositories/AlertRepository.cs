@@ -134,6 +134,21 @@ public class AlertRepository : IAlertRepository
         return _context.Alerts.Include(a => a.Tags).FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
+    public Task<Alert?> FindRecentDuplicateAsync(string title, Severity severity, DateTime createdAfterUtc, CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLower();
+
+        return _context.Alerts
+            .AsNoTracking()
+            .Include(a => a.Tags)
+            .Where(a => a.IsActive
+                && a.Severity == severity
+                && a.CreatedDate >= createdAfterUtc
+                && a.Title.ToLower() == normalizedTitle)
+            .OrderByDescending(a => a.CreatedDate)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
     {
         await _context.Alerts.AddAsync(alert, cancellationToken);

@@ -4,6 +4,7 @@ using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -209,10 +210,11 @@ public class AlertsControllerTests
     }
 
     [Fact]
-    public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
+    public async Task Create_WhenCreated_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreateAlertResult { Status = CreateAlertStatus.Created, Alert = SampleResponse(5) });
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -220,6 +222,21 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+    }
+
+    [Fact]
+    public async Task Create_WhenSuppressed_ReturnsOk_WithExistingAlert_AndDuplicateHeader()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CreateAlertResult { Status = CreateAlertStatus.Suppressed, Alert = SampleResponse(9) });
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(9, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal("true", _controller.Response.Headers["X-Duplicate-Suppressed"].ToString());
     }
 
     [Fact]
