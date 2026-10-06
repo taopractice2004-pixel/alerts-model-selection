@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+L1_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -16,8 +16,8 @@ PREPARE_PR
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | STAGE_PASSED |
 
 ## Entries
 
@@ -76,3 +76,31 @@ PREPARE_PR
 - Standards notes: None
 - Deferred: Human must create the PR and fill work.json → pr.url
 - Next recommended command: /l0-review ALERT-412 — after the developer confirms the PR exists
+
+### 2026-10-06 — /l0-review — STAGE_PASSED
+- Summary: L0 PASS. Reviewed 8 production files from the committed diff (HEAD~1..HEAD); scope matches work.json, no secrets/injection risk (parameterized EF, AsNoTracking, DB-side grouping, input bounded by [Range]), constants centralized, standards followed.
+- Files changed: work.json, log.md (read-only review)
+- Build: NOT_RUN (reused recorded result)
+- Unit tests: NOT_RUN (reused recorded result)
+- Acceptance criteria: reused
+- Coverage: NOT_RUN
+- Bugs: None
+- Review: L0 PASS, 0 findings
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: None
+- Deferred: None
+- Next recommended command: /l1-review ALERT-412
+
+### 2026-10-06 — /l1-review — STAGE_PASSED
+- Summary: L1 PASS. Implementation matches plan.md; layering Controller -> Service -> Repository respected; DB-side grouping with service zero-fill; DTO-only responses; bare array response and DateOnly date consistent with api-rest standard; no schema/config impact; test strategy covers boundaries, zero-fill, window start and ordering.
+- Files changed: work.json, log.md (read-only review)
+- Build: NOT_RUN (reused recorded result)
+- Unit tests: NOT_RUN (reused recorded result)
+- Acceptance criteria: reused (AC7 non-numeric 400 relies on [ApiController] model binding; not unit-verifiable, accepted)
+- Coverage: NOT_RUN
+- Bugs: None
+- Review: L1 PASS, 0 findings
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: None
+- Deferred: AC7 WebApplicationFactory test, AlertService.API.http, README.md route table (optional, non-blocking)
+- Next recommended command: None — review complete
