@@ -96,24 +96,14 @@
     "cycle": 1,
     "max_review_cycles": 3,
     "origin": "l1",
-    "return_after_testing": true,
+    "return_after_testing": false,
     "l0": {
-        "status": "PASS",
+      "status": "PASS",
       "findings": []
     },
     "l1": {
-      "status": "CHANGES_REQUIRED",
-      "findings": [
-        {
-          "id": "ALERT-411-L1-F1",
-          "severity": "MEDIUM",
-          "location": "AlertService.API/Services/AlertManagementService.cs -> CreateAsync; AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
-          "description": "Duplicate suppression ignores the incoming request's IsActive value, so an explicitly inactive create can be collapsed into an existing active alert.",
-          "reason": "The approved constraints treat active status as part of the duplicate definition, but CreateAsync always runs the active-duplicate lookup before considering request.IsActive. A client can therefore POST an inactive alert and receive a 200 response for an unrelated active alert instead of creating the requested inactive record. The current tests cover inactive prior alerts, but they do not cover an inactive incoming create request, so this semantic gap is not exercised.",
-          "suggestion": "Limit duplicate suppression to requests that are themselves active, or otherwise include the incoming active state in the duplicate criteria, and add a test proving that CreateAsync persists a new alert when request.IsActive is false even if a recent active match exists.",
-          "status": "RESOLVED"
-        }
-      ]
+      "status": "PASS",
+      "findings": []
     }
   },
   "repo_context_fallback_needed": false,
