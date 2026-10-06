@@ -312,6 +312,59 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetTrendsAsync_ReturnsOldestFirstWithZeroFilledDaysAndSeverityBreakdown()
+    {
+        var todayUtc = DateTime.UtcNow.Date;
+
+        await _repository.AddAsync(NewAlert("Oldest low", Severity.Low, todayUtc.AddDays(-2).AddHours(1)));
+        await _repository.AddAsync(NewAlert("Oldest critical", Severity.Critical, todayUtc.AddDays(-2).AddHours(5)));
+        await _repository.AddAsync(NewAlert("Today high", Severity.High, todayUtc.AddHours(2)));
+
+        var trends = await _repository.GetTrendsAsync(3);
+
+        Assert.Equal(3, trends.Count);
+
+        Assert.Equal(DateOnly.FromDateTime(todayUtc.AddDays(-2)), trends[0].DateUtc);
+        Assert.Equal(2, trends[0].TotalCount);
+        Assert.Equal(1, trends[0].LowCount);
+        Assert.Equal(0, trends[0].MediumCount);
+        Assert.Equal(0, trends[0].HighCount);
+        Assert.Equal(1, trends[0].CriticalCount);
+
+        Assert.Equal(DateOnly.FromDateTime(todayUtc.AddDays(-1)), trends[1].DateUtc);
+        Assert.Equal(0, trends[1].TotalCount);
+        Assert.Equal(0, trends[1].LowCount);
+        Assert.Equal(0, trends[1].MediumCount);
+        Assert.Equal(0, trends[1].HighCount);
+        Assert.Equal(0, trends[1].CriticalCount);
+
+        Assert.Equal(DateOnly.FromDateTime(todayUtc), trends[2].DateUtc);
+        Assert.Equal(1, trends[2].TotalCount);
+        Assert.Equal(0, trends[2].LowCount);
+        Assert.Equal(0, trends[2].MediumCount);
+        Assert.Equal(1, trends[2].HighCount);
+        Assert.Equal(0, trends[2].CriticalCount);
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_ExcludesAlertsOutsideRequestedWindow()
+    {
+        var todayUtc = DateTime.UtcNow.Date;
+
+        await _repository.AddAsync(NewAlert("Before window", Severity.Medium, todayUtc.AddDays(-3).AddHours(2)));
+        await _repository.AddAsync(NewAlert("Inside window", Severity.Medium, todayUtc.AddDays(-1).AddHours(2)));
+        await _repository.AddAsync(NewAlert("After window", Severity.Medium, todayUtc.AddDays(1).AddHours(2)));
+
+        var trends = await _repository.GetTrendsAsync(2);
+
+        Assert.Equal(2, trends.Count);
+        Assert.Equal(DateOnly.FromDateTime(todayUtc.AddDays(-1)), trends[0].DateUtc);
+        Assert.Equal(1, trends[0].TotalCount);
+        Assert.Equal(DateOnly.FromDateTime(todayUtc), trends[1].DateUtc);
+        Assert.Equal(0, trends[1].TotalCount);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));

@@ -125,6 +125,50 @@ public class AlertRepository : IAlertRepository
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
     }
 
+    public async Task<IReadOnlyList<(DateOnly DateUtc, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>> GetTrendsAsync(
+        int days,
+        CancellationToken cancellationToken = default)
+    {
+        var todayUtc = DateTime.UtcNow.Date;
+        var startDateUtc = todayUtc.AddDays(-(days - 1));
+        var endDateExclusiveUtc = todayUtc.AddDays(1);
+
+        var groupedCounts = await _context.Alerts
+            .AsNoTracking()
+            .Where(alert => alert.CreatedDate >= startDateUtc && alert.CreatedDate < endDateExclusiveUtc)
+            .GroupBy(alert => alert.CreatedDate.Date)
+            .Select(group => new
+            {
+                DateUtc = group.Key,
+                TotalCount = group.Count(),
+                LowCount = group.Count(alert => alert.Severity == Severity.Low),
+                MediumCount = group.Count(alert => alert.Severity == Severity.Medium),
+                HighCount = group.Count(alert => alert.Severity == Severity.High),
+                CriticalCount = group.Count(alert => alert.Severity == Severity.Critical)
+            })
+            .ToListAsync(cancellationToken);
+
+        var countsByDate = groupedCounts.ToDictionary(
+            item => DateOnly.FromDateTime(item.DateUtc.Date),
+            item => (item.TotalCount, item.LowCount, item.MediumCount, item.HighCount, item.CriticalCount));
+
+        var trends = new List<(DateOnly DateUtc, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>(days);
+
+        for (var offset = 0; offset < days; offset++)
+        {
+            var currentDate = DateOnly.FromDateTime(startDateUtc.AddDays(offset));
+            if (countsByDate.TryGetValue(currentDate, out var counts))
+            {
+                trends.Add((currentDate, counts.TotalCount, counts.LowCount, counts.MediumCount, counts.HighCount, counts.CriticalCount));
+                continue;
+            }
+
+            trends.Add((currentDate, 0, 0, 0, 0, 0));
+        }
+
+        return trends;
+    }
+
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
     {
         var normalizedSortBy = sortBy.Trim();

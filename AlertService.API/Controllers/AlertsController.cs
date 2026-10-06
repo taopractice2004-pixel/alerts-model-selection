@@ -2,6 +2,7 @@ using AlertService.API.Services;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace AlertService.API.Controllers;
 
@@ -44,6 +45,21 @@ public class AlertsController : ControllerBase
     {
         var summary = await _alertService.GetSummaryAsync(cancellationToken);
         return Ok(summary);
+    }
+
+    /// <summary>Gets daily UTC alert volume trends for the last N days.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(IReadOnlyList<AlertTrendResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AlertTrendResponse>>> GetTrends(
+        [FromQuery]
+        [Range(1, 90)]
+        int? days,
+        CancellationToken cancellationToken)
+    {
+        var numberOfDays = days ?? 7;
+        var trends = await _alertService.GetTrendsAsync(numberOfDays, cancellationToken);
+        return Ok(trends);
     }
 
     /// <summary>Creates a new alert.</summary>

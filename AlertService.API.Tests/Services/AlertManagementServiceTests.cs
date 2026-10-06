@@ -197,6 +197,47 @@ public class AlertManagementServiceTests
     }
 
     [Fact]
+    public async Task GetTrendsAsync_MapsRepositoryTrendRowsToResponse()
+    {
+        var trendRows = new List<(DateOnly DateUtc, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>
+        {
+            (new DateOnly(2026, 8, 30), 3, 1, 0, 1, 1),
+            (new DateOnly(2026, 8, 31), 0, 0, 0, 0, 0),
+            (new DateOnly(2026, 9, 1), 2, 0, 1, 1, 0)
+        };
+
+        _repository.Setup(r => r.GetTrendsAsync(3, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(trendRows);
+
+        var result = await _service.GetTrendsAsync(3);
+
+        Assert.Equal(3, result.Count);
+
+        Assert.Equal(new DateOnly(2026, 8, 30), result[0].Date);
+        Assert.Equal(3, result[0].TotalCount);
+        Assert.Equal(1, result[0].SeverityCounts.Low);
+        Assert.Equal(0, result[0].SeverityCounts.Medium);
+        Assert.Equal(1, result[0].SeverityCounts.High);
+        Assert.Equal(1, result[0].SeverityCounts.Critical);
+
+        Assert.Equal(new DateOnly(2026, 8, 31), result[1].Date);
+        Assert.Equal(0, result[1].TotalCount);
+        Assert.Equal(0, result[1].SeverityCounts.Low);
+        Assert.Equal(0, result[1].SeverityCounts.Medium);
+        Assert.Equal(0, result[1].SeverityCounts.High);
+        Assert.Equal(0, result[1].SeverityCounts.Critical);
+
+        Assert.Equal(new DateOnly(2026, 9, 1), result[2].Date);
+        Assert.Equal(2, result[2].TotalCount);
+        Assert.Equal(0, result[2].SeverityCounts.Low);
+        Assert.Equal(1, result[2].SeverityCounts.Medium);
+        Assert.Equal(1, result[2].SeverityCounts.High);
+        Assert.Equal(0, result[2].SeverityCounts.Critical);
+
+        _repository.Verify(r => r.GetTrendsAsync(3, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task CreateAsync_SetsCreatedDate_TrimsInput_AndSaves()
     {
         Alert? saved = null;

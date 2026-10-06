@@ -93,6 +93,26 @@ public class AlertManagementService : IAlertService
         };
     }
 
+    public async Task<IReadOnlyList<AlertTrendResponse>> GetTrendsAsync(int days, CancellationToken cancellationToken = default)
+    {
+        var trends = await _repository.GetTrendsAsync(days, cancellationToken);
+
+        return trends
+            .Select(trend => new AlertTrendResponse
+            {
+                Date = trend.DateUtc,
+                TotalCount = trend.TotalCount,
+                SeverityCounts = new AlertSeverityCountsResponse
+                {
+                    Low = trend.LowCount,
+                    Medium = trend.MediumCount,
+                    High = trend.HighCount,
+                    Critical = trend.CriticalCount
+                }
+            })
+            .ToList();
+    }
+
     public async Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);

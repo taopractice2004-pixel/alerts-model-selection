@@ -1,11 +1,18 @@
 using System.ComponentModel.DataAnnotations;
+using System.Net;
+using System.Net.Http.Json;
 using AlertService.API.Controllers;
 using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 
 namespace AlertService.API.Tests.Controllers;
@@ -215,6 +222,48 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_WhenDaysNotProvided_UsesDefaultSevenDays()
+    {
+        _service.Setup(s => s.GetTrendsAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(new List<AlertTrendResponse>());
+
+        var result = await _controller.GetTrends(null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsAssignableFrom<IReadOnlyList<AlertTrendResponse>>(ok.Value);
+        _service.Verify(s => s.GetTrendsAsync(7, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTrends_WhenDaysProvided_PassesDaysToService()
+    {
+        _service.Setup(s => s.GetTrendsAsync(14, It.IsAny<CancellationToken>())).ReturnsAsync(new List<AlertTrendResponse>());
+
+        _ = await _controller.GetTrends(14, CancellationToken.None);
+
+        _service.Verify(s => s.GetTrendsAsync(14, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("91")]
+    [InlineData("abc")]
+    public async Task GetTrends_WithInvalidDaysQuery_ReturnsBadRequestValidationProblem(string days)
+    {
+        var strictService = new Mock<IAlertService>(MockBehavior.Strict);
+        using var factory = new TrendsEndpointWebApplicationFactory(strictService.Object);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/api/alerts/trends?days={days}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem!.Status);
+        Assert.Contains(problem.Errors.Keys, key => string.Equals(key, "days", StringComparison.OrdinalIgnoreCase));
+        strictService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
@@ -364,5 +413,34 @@ public class AlertsControllerTests
         var result = await _controller.RemoveTag(1, "ops", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    private sealed class TrendsEndpointWebApplicationFactory : WebApplicationFactory<Program>
+    {
+        private readonly IAlertService _alertService;
+
+        public TrendsEndpointWebApplicationFactory(IAlertService alertService)
+        {
+            _alertService = alertService;
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+
+            builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+            {
+                configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Database:ApplyMigrationsOnStartup"] = "false"
+                });
+            });
+
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAlertService>();
+                services.AddSingleton(_alertService);
+            });
+        }
     }
 }

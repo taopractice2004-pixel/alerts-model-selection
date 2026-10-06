@@ -14,6 +14,8 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AlertTrendResponse>> GetTrendsAsync(int days, CancellationToken cancellationToken = default);
+
     Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
