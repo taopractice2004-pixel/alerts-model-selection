@@ -1,7 +1,11 @@
+using AlertService.API.Configuration;
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
+using AlertService.Common.Enums;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.Extensions.Options;
 
 namespace AlertService.API.Services;
 
@@ -10,15 +14,18 @@ public class AlertManagementService : IAlertService
 {
     private readonly IAlertRepository _repository;
     private readonly TimeProvider _timeProvider;
+    private readonly AlertSuppressionOptions _suppressionOptions;
     private readonly ILogger<AlertManagementService> _logger;
 
     public AlertManagementService(
         IAlertRepository repository,
         TimeProvider timeProvider,
+        IOptions<AlertSuppressionOptions> suppressionOptions,
         ILogger<AlertManagementService> logger)
     {
         _repository = repository;
         _timeProvider = timeProvider;
+        _suppressionOptions = suppressionOptions.Value;
         _logger = logger;
     }
 
@@ -32,6 +39,7 @@ public class AlertManagementService : IAlertService
             request.CreatedFrom,
             request.CreatedTo,
             request.Search,
+            request.Tag,
             request.SortBy,
             request.SortDirection,
             request.Page,
@@ -79,15 +87,72 @@ public class AlertManagementService : IAlertService
         };
     }
 
-    public async Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    public async Task<AlertTrendsResponse> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        var days = request.Days;
+        var todayUtc = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
+        var startDay = todayUtc.AddDays(-(days - 1));
+
+        var fromUtcInclusive = startDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toUtcExclusive = todayUtc.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        var counts = await _repository.GetDailySeverityCountsAsync(fromUtcInclusive, toUtcExclusive, cancellationToken);
+        var countsByDayAndSeverity = counts.ToDictionary(
+            row => (DateOnly.FromDateTime(row.Day), row.Severity),
+            row => row.Count);
+
+        var trends = new List<AlertDailyTrendResponse>(days);
+        for (var offset = 0; offset < days; offset++)
+        {
+            var day = startDay.AddDays(offset);
+            var severityCounts = new AlertSeverityCountsResponse
+            {
+                Low = countsByDayAndSeverity.GetValueOrDefault((day, Severity.Low)),
+                Medium = countsByDayAndSeverity.GetValueOrDefault((day, Severity.Medium)),
+                High = countsByDayAndSeverity.GetValueOrDefault((day, Severity.High)),
+                Critical = countsByDayAndSeverity.GetValueOrDefault((day, Severity.Critical))
+            };
+
+            trends.Add(new AlertDailyTrendResponse
+            {
+                Date = day,
+                TotalCount = severityCounts.Low + severityCounts.Medium + severityCounts.High + severityCounts.Critical,
+                SeverityCounts = severityCounts
+            });
+        }
+
+        return new AlertTrendsResponse
+        {
+            Days = days,
+            Trends = trends
+        };
+    }
+
+    public async Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var windowMinutes = _suppressionOptions.WindowMinutes;
+        if (windowMinutes > 0)
+        {
+            var cutoff = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-windowMinutes);
+            var duplicate = await _repository.FindRecentDuplicateAsync(request.Title, request.Severity, cutoff, cancellationToken);
+            if (duplicate is not null)
+            {
+                _logger.LogInformation(
+                    "Suppressed duplicate alert for title '{Title}' with severity {Severity}; returning existing alert {AlertId}",
+                    duplicate.Title, duplicate.Severity, duplicate.Id);
+                return new CreateAlertResult { Status = CreateAlertStatus.Suppressed, Alert = duplicate.ToResponse() };
+            }
+        }
 
         var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);
         var created = await _repository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation("Created alert {AlertId} with severity {Severity}", created.Id, created.Severity);
-        return created.ToResponse();
+        return new CreateAlertResult { Status = CreateAlertStatus.Created, Alert = created.ToResponse() };
     }
 
     public async Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default)
@@ -142,5 +207,63 @@ public class AlertManagementService : IAlertService
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
+    }
+
+    public async Task<AddTagsResult> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return new AddTagsResult { Status = AddTagsStatus.AlertNotFound };
+        }
+
+        // Normalize the request: trim, drop blanks, and dedupe within the request case-insensitively.
+        var requestedTags = request.Tags
+            .Select(t => t?.Trim() ?? string.Empty)
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Keep only tags not already assigned to the alert (case-insensitive) so re-adding is a no-op.
+        var newTags = requestedTags
+            .Where(t => !alert.Tags.Any(existing => string.Equals(existing.Name, t, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        if (newTags.Count == 0)
+        {
+            return new AddTagsResult { Status = AddTagsStatus.Success, Alert = alert.ToResponse() };
+        }
+
+        if (alert.Tags.Count + newTags.Count > AlertConstants.MaxTagsPerAlert)
+        {
+            _logger.LogWarning("Rejected adding {Count} tags to alert {AlertId}: exceeds limit", newTags.Count, id);
+            return new AddTagsResult { Status = AddTagsStatus.TagLimitExceeded };
+        }
+
+        await _repository.AddTagsAsync(alert, newTags, cancellationToken);
+
+        _logger.LogInformation("Added {Count} tag(s) to alert {AlertId}", newTags.Count, id);
+        return new AddTagsResult { Status = AddTagsStatus.Success, Alert = alert.ToResponse() };
+    }
+
+    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot remove tag from alert {AlertId}: not found", id);
+            return false;
+        }
+
+        var removed = await _repository.RemoveTagAsync(alert, tag.Trim(), cancellationToken);
+        if (removed)
+        {
+            _logger.LogInformation("Removed tag from alert {AlertId}", id);
+        }
+
+        return removed;
     }
 }

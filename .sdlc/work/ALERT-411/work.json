@@ -1,0 +1,106 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate alerts on POST /api/alerts within a configurable time window, returning the existing alert instead of creating a new row.",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "On POST /api/alerts, when an active alert with the same Title (case-insensitive) and same Severity was created within the last N minutes (configurable window), no new alert row is created." },
+    { "id": "AC2", "text": "A suppressed request returns 200 OK with the existing matching alert as the body and response header 'X-Duplicate-Suppressed: true'." },
+    { "id": "AC3", "text": "A genuinely new (non-duplicate) alert still returns 201 Created with the created alert, and no suppression header set to true." },
+    { "id": "AC4", "text": "The suppression window in minutes is read from appsettings.json configuration and is not hardcoded." },
+    { "id": "AC5", "text": "Alerts with the same Title but a different Severity are not suppressed (a new alert is created)." },
+    { "id": "AC6", "text": "A prior matching alert that is inactive does not cause suppression (a new alert is created)." }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts -> AlertsController.Create",
+    "AlertManagementService.CreateAsync",
+    "IAlertRepository duplicate lookup",
+    "appsettings.json suppression configuration section"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/Program.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Services/IAlertService.cs (CreateAsync return shape changes to convey suppression)",
+    "AlertService.API/appsettings.json (new suppression window config section)",
+    "AlertService.API/appsettings.Development.json (optional override)",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (reuse ToResponse; no change expected)",
+    "New options type for the suppression window (e.g. AlertService.API/Configuration/*.cs) (new)",
+    "New service result type conveying Created vs Suppressed + AlertResponse (new)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "service-architecture",
+    "database"
+  ],
+  "constraints": [
+    "Do not change public GET/PUT/PATCH/DELETE behavior; only POST /api/alerts create path is affected.",
+    "Service layer must not reference HttpContext; controller owns the 200-vs-201 status and the X-Duplicate-Suppressed header.",
+    "Suppression window must be bound from configuration with a safe default; never hardcode the 15-minute value in code.",
+    "Duplicate match semantics: existing alert IsActive == true AND same Severity AND Title equal case-insensitively AND CreatedDate within window measured from TimeProvider UTC now.",
+    "Use the injected TimeProvider for the window boundary; do not call DateTime.UtcNow directly.",
+    "Follow existing result-object pattern (see AddTagsResult) rather than throwing to signal suppression.",
+    "DECIDED (human-confirmed 2026-10-06): config key 'AlertSuppression:WindowMinutes', default 15; a value <= 0 disables suppression.",
+    "DECIDED (human-confirmed 2026-10-06): when multiple active matches exist within the window, return the most recently created matching alert.",
+    "DECIDED (human-confirmed 2026-10-06): the incoming request's IsActive is ignored for matching; only the EXISTING alert's IsActive governs suppression (AC6)."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "coverage_goals": [
+    "Behavior coverage of all six acceptance criteria: suppressed path (200 + header, no new row), created path (201), different-severity not suppressed, inactive-prior not suppressed, and window boundary (inside vs outside window)."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_files_and_add_cases",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "PASS",
+      "findings": []
+    },
+    "l1": {
+      "status": "PASS",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}
