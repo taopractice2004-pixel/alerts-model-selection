@@ -353,6 +353,38 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task FindActiveDuplicateAsync_ReturnsNewestCaseInsensitiveActiveMatchWithinWindow()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 50, 0, DateTimeKind.Utc), isActive: true));
+        var newest = await _repository.AddAsync(NewAlert("DISK FULL", Severity.High, new DateTime(2026, 1, 1, 11, 58, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 40, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindActiveDuplicateAsync(
+            "  disk full  ",
+            Severity.High,
+            new DateTime(2026, 1, 1, 11, 45, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(result);
+        Assert.Equal(newest.Id, result!.Id);
+        Assert.Equal("DISK FULL", result.Title);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_IgnoresInactiveDifferentSeverityAndOlderMatches()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 58, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Critical, new DateTime(2026, 1, 1, 11, 58, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 40, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindActiveDuplicateAsync(
+            "disk full",
+            Severity.High,
+            new DateTime(2026, 1, 1, 11, 45, 0, DateTimeKind.Utc));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public async Task AddTagsAsync_CreatesNewTags_AssignsThem_AndSkipsDuplicates()
     {
         var added = await _repository.AddAsync(NewAlert());

@@ -3,6 +3,7 @@ using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.Extensions.Configuration;
 using System.Text.RegularExpressions;
 
 namespace AlertService.API.Services;
@@ -10,18 +11,23 @@ namespace AlertService.API.Services;
 // Named AlertManagementService (not "AlertService") to avoid clashing with the root namespace.
 public class AlertManagementService : IAlertService
 {
+    private const string DuplicateSuppressionWindowMinutesKey = "Alerts:DuplicateSuppressionWindowMinutes";
+
     private readonly IAlertRepository _repository;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AlertManagementService> _logger;
+    private readonly IConfiguration _configuration;
 
     public AlertManagementService(
         IAlertRepository repository,
         TimeProvider timeProvider,
-        ILogger<AlertManagementService> logger)
+        ILogger<AlertManagementService> logger,
+        IConfiguration configuration)
     {
         _repository = repository;
         _timeProvider = timeProvider;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task<PagedResponse<AlertResponse>> GetAllAsync(AlertQueryRequest request, CancellationToken cancellationToken = default)
@@ -82,15 +88,34 @@ public class AlertManagementService : IAlertService
         };
     }
 
-    public async Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    public async Task<(AlertResponse Alert, bool DuplicateSuppressed)> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        var suppressionWindowMinutes = GetDuplicateSuppressionWindowMinutes();
+        var createdAfterUtc = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-suppressionWindowMinutes);
+        var existingAlert = await _repository.FindActiveDuplicateAsync(
+            request.Title,
+            request.Severity,
+            createdAfterUtc,
+            cancellationToken);
+
+        if (existingAlert is not null)
+        {
+            _logger.LogInformation(
+                "Suppressed duplicate alert for title {AlertTitle} and severity {Severity} in favor of alert {AlertId}",
+                existingAlert.Title,
+                existingAlert.Severity,
+                existingAlert.Id);
+
+            return (existingAlert.ToResponse(), true);
+        }
 
         var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);
         var created = await _repository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation("Created alert {AlertId} with severity {Severity}", created.Id, created.Severity);
-        return created.ToResponse();
+        return (created.ToResponse(), false);
     }
 
     public async Task<AlertTagAddResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default)
@@ -231,5 +256,16 @@ public class AlertManagementService : IAlertService
     private static string NormalizeTag(string tag)
     {
         return tag.Trim().ToLowerInvariant();
+    }
+
+    private int GetDuplicateSuppressionWindowMinutes()
+    {
+        var suppressionWindowMinutes = _configuration.GetValue<int?>(DuplicateSuppressionWindowMinutesKey);
+        if (!suppressionWindowMinutes.HasValue || suppressionWindowMinutes.Value <= 0)
+        {
+            throw new InvalidOperationException($"Configuration value '{DuplicateSuppressionWindowMinutesKey}' must be a positive integer.");
+        }
+
+        return suppressionWindowMinutes.Value;
     }
 }

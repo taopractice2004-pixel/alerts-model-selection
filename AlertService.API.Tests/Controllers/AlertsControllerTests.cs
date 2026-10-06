@@ -4,6 +4,7 @@ using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -17,6 +18,10 @@ public class AlertsControllerTests
     public AlertsControllerTests()
     {
         _controller = new AlertsController(_service.Object);
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
     }
 
     private static PagedResponse<AlertResponse> SamplePagedResponse(params AlertResponse[] items) => new()
@@ -255,7 +260,7 @@ public class AlertsControllerTests
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync((SampleResponse(5), false));
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -263,6 +268,20 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+        Assert.False(_controller.Response.Headers.ContainsKey("X-Duplicate-Suppressed"));
+    }
+
+    [Fact]
+    public async Task Create_WhenDuplicateSuppressed_ReturnsOkWithHeader()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync((SampleResponse(7), true));
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(7, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal("true", Assert.Single(_controller.Response.Headers["X-Duplicate-Suppressed"]));
     }
 
     [Fact]

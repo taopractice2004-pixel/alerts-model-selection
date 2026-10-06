@@ -4,6 +4,7 @@ using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using AlertService.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
@@ -23,7 +24,27 @@ public class AlertManagementServiceTests
         _service = new AlertManagementService(
             _repository.Object,
             _timeProvider.Object,
-            NullLogger<AlertManagementService>.Instance);
+            NullLogger<AlertManagementService>.Instance,
+            CreateConfiguration());
+    }
+
+    private static IConfiguration CreateConfiguration(int suppressionWindowMinutes = 15)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Alerts:DuplicateSuppressionWindowMinutes"] = suppressionWindowMinutes.ToString()
+            })
+            .Build();
+    }
+
+    private AlertManagementService CreateService(int suppressionWindowMinutes)
+    {
+        return new AlertManagementService(
+            _repository.Object,
+            _timeProvider.Object,
+            NullLogger<AlertManagementService>.Instance,
+            CreateConfiguration(suppressionWindowMinutes));
     }
 
     private static Alert ExistingAlert(int id = 1) => new()
@@ -248,6 +269,10 @@ public class AlertManagementServiceTests
     public async Task CreateAsync_SetsCreatedDate_TrimsInput_AndSaves()
     {
         Alert? saved = null;
+        var expectedCreatedAfterUtc = FixedNow.UtcDateTime.AddMinutes(-15);
+
+        _repository.Setup(r => r.FindActiveDuplicateAsync("  Service down  ", Severity.Critical, expectedCreatedAfterUtc, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Alert?)null);
         _repository.Setup(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()))
             .Callback<Alert, CancellationToken>((a, _) => { saved = a; a.Id = 10; })
             .ReturnsAsync((Alert a, CancellationToken _) => a);
@@ -266,15 +291,80 @@ public class AlertManagementServiceTests
         Assert.Equal("Service down", saved!.Title);
         Assert.Equal("Payments API", saved.Description);
         Assert.Equal(FixedNow.UtcDateTime, saved.CreatedDate);
-        Assert.Equal(10, result.Id);
-        Assert.Equal(Severity.Critical, result.Severity);
+        Assert.False(result.DuplicateSuppressed);
+        Assert.Equal(10, result.Alert.Id);
+        Assert.Equal(Severity.Critical, result.Alert.Severity);
+        _repository.Verify(r => r.FindActiveDuplicateAsync("  Service down  ", Severity.Critical, expectedCreatedAfterUtc, It.IsAny<CancellationToken>()), Times.Once);
         _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenRecentActiveDuplicateExists_ReturnsExistingAlertAndSkipsSave()
+    {
+        var existing = ExistingAlert(42);
+        existing.Title = "memory leak";
+        existing.Severity = Severity.Critical;
+        existing.CreatedDate = FixedNow.UtcDateTime.AddMinutes(-2);
+        var expectedCreatedAfterUtc = FixedNow.UtcDateTime.AddMinutes(-15);
+
+        _repository.Setup(r => r.FindActiveDuplicateAsync(" Memory Leak ", Severity.Critical, expectedCreatedAfterUtc, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var result = await _service.CreateAsync(new CreateAlertRequest
+        {
+            Title = " Memory Leak ",
+            Severity = Severity.Critical,
+            Description = "Same issue"
+        });
+
+        Assert.True(result.DuplicateSuppressed);
+        Assert.Equal(42, result.Alert.Id);
+        Assert.Equal("memory leak", result.Alert.Title);
+        _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UsesConfiguredSuppressionWindowForDuplicateLookup()
+    {
+        var service = CreateService(5);
+        DateTime? capturedCreatedAfterUtc = null;
+
+        _repository.Setup(r => r.FindActiveDuplicateAsync("Memory leak", Severity.Medium, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Severity, DateTime, CancellationToken>((_, _, createdAfterUtc, _) => capturedCreatedAfterUtc = createdAfterUtc)
+            .ReturnsAsync((Alert?)null);
+        _repository.Setup(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Alert alert, CancellationToken _) =>
+            {
+                alert.Id = 88;
+                return alert;
+            });
+
+        var result = await service.CreateAsync(new CreateAlertRequest
+        {
+            Title = "Memory leak",
+            Severity = Severity.Medium
+        });
+
+        Assert.False(result.DuplicateSuppressed);
+        Assert.Equal(FixedNow.UtcDateTime.AddMinutes(-5), capturedCreatedAfterUtc);
     }
 
     [Fact]
     public async Task CreateAsync_NullRequest_Throws()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(() => _service.CreateAsync(null!));
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithInvalidSuppressionWindow_Throws()
+    {
+        var service = CreateService(0);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateAsync(new CreateAlertRequest
+        {
+            Title = "Memory leak",
+            Severity = Severity.Medium
+        }));
     }
 
     [Fact]

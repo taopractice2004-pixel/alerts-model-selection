@@ -136,6 +136,18 @@ public class AlertRepository : IAlertRepository
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
+    public Task<Alert?> FindActiveDuplicateAsync(string title, Severity severity, DateTime createdAfterUtc, CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLower();
+
+        return _context.Alerts
+            .AsNoTracking()
+            .Include(a => a.Tags)
+            .Where(a => a.IsActive && a.Severity == severity && a.CreatedDate >= createdAfterUtc)
+            .OrderByDescending(a => a.CreatedDate)
+            .FirstOrDefaultAsync(a => a.Title.ToLower() == normalizedTitle, cancellationToken);
+    }
+
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
     {
         await _context.Alerts.AddAsync(alert, cancellationToken);

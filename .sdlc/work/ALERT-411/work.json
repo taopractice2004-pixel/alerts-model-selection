@@ -1,0 +1,112 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Suppress near-duplicate active alerts on create using a configurable time window while preserving normal create behavior for genuinely new alerts.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "POST /api/alerts returns 200 OK with the existing alert and the response header X-Duplicate-Suppressed: true when an active alert with the same title (case-insensitive) and severity was created within the configured suppression window."
+    },
+    {
+      "id": "AC2",
+      "text": "POST /api/alerts returns 201 Created and persists a new alert when no active matching alert exists inside the configured suppression window."
+    },
+    {
+      "id": "AC3",
+      "text": "The duplicate suppression window is configurable through appsettings.json rather than hardcoded in the alert creation flow."
+    },
+    {
+      "id": "AC4",
+      "text": "Duplicate suppression does not apply across different severities and does not reuse prior matching alerts that are inactive."
+    }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts",
+    "AlertService.API/Controllers/AlertsController.cs -> Create",
+    "AlertService.API/Services/AlertManagementService.cs -> CreateAsync",
+    "AlertService.Data/Interfaces/IAlertRepository.cs + AlertService.Data.SQL/Repositories/AlertRepository.cs duplicate lookup seam",
+    "AlertService.API/appsettings.json suppression window setting"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Program.cs",
+    "AlertService.API/Mappings/AlertMappingExtensions.cs",
+    "AlertService.DTO/Requests/CreateAlertRequest.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Keep the existing controller -> service -> repository layering intact; duplicate-detection logic belongs in the service/repository flow, not in the controller.",
+    "Preserve the existing CreatedAtRoute 201 response for genuinely new alerts while adding the 200 OK plus X-Duplicate-Suppressed header path for suppressed duplicates.",
+    "Compare titles case-insensitively together with exact severity, active status, and created-within-window rules so suppression stays limited to the requested definition.",
+    "Read the suppression-window duration from configuration instead of embedding a literal minute value in code."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "NOT_CONFIGURED"
+  ],
+  "coverage_goals": [
+    "Behavior coverage for suppressed duplicate create requests, including the 200 OK response header path and reuse of the existing alert payload.",
+    "Behavior coverage for genuine create requests that still return 201 Created when the prior alert is outside the suppression window or absent.",
+    "Behavior coverage for the non-suppression rules around inactive prior alerts and different severities, plus repository matching on case-insensitive titles within the configured window."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "NOT_STARTED",
+      "findings": []
+    },
+    "l1": {
+      "status": "NOT_STARTED",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}
