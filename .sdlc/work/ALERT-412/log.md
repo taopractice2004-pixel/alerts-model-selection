@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+L1_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -16,8 +16,8 @@ PREPARE_PR
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | STAGE_PASSED |
 
 ## Entries
 
@@ -74,4 +74,35 @@ PREPARE_PR
 - Loop: 0/3 — TESTS_PASSED
 - Human action required: review pr.md, then manually create/push the PR (AI does not touch Git)
 - Next recommended command: /l0-review ALERT-412 — after the developer confirms the PR exists
+
+### 2026-10-06T00:00:00Z — /l0-review — STAGE_PASSED
+- Summary: Read-only L0 code-level review of the committed ALERT-412 changes (commit 61c581f). Reviewed scope discipline, coding/repository standards, code quality, security, and static checks on the changed production files. No findings requiring code changes.
+- Reviewed files: AlertsController.cs, AlertManagementService.cs, IAlertService.cs, AlertConstants.cs, AlertRepository.cs, IAlertRepository.cs, AlertTrendsQueryRequest.cs, AlertTrendsResponse.cs, AlertDailyTrendResponse.cs
+- Changed-files source: read-only `git show --stat HEAD` (changes committed; working tree clean)
+- A. Scope discipline: PASS — all changed files within work.json scope (exact_source_files + adjacent_dependencies); additive only; no unrelated/vendor/generated changes.
+- B. Coding/repository standards: PASS — naming (GetTrendsAsync, AlertTrendsQueryRequest), file-scoped namespaces, XML docs, and constants (DefaultTrendDays/MinTrendDays/MaxTrendDays) match neighboring patterns; new response DTOs mirror AlertSummaryResponse.
+- C. Code quality: PASS — ArgumentNullException.ThrowIfNull guard; efficient EF group-by (AsNoTracking, no full-table load); dictionary zero-fill with unique day+severity keys; no dead/duplicate code.
+- D. Security: PASS — read-only endpoint; parameterized LINQ (no injection); [Range(1,90)] input validation; no secrets or sensitive logging.
+- E. Static/code-level checks: PASS — reused recorded build (succeeded) and tests (API.Tests 81/81, Data.SQL.Tests 44/44); not re-run.
+- Build: NOT_RUN (reused recorded result)
+- Unit tests: NOT_RUN (reused recorded result)
+- Findings: None
+- Review: review.l0.status = PASS; 0 findings
+- Loop: 0/3 — TESTS_PASSED
+- Next recommended command: /l1-review ALERT-412
+
+### 2026-10-06T00:00:00Z — /l1-review — STAGE_PASSED
+- Summary: Read-only L1 engineering/design review of the committed ALERT-412 changes (commit 61c581f). Judged requirement correctness, architecture, design/maintainability, API/data design, and test-strategy quality. No findings requiring changes.
+- Changed-files source: read-only `git show HEAD` (changes committed; working tree clean)
+- A. Requirement implementation: PASS — implementation matches plan.md; AC1 (default 7), AC2 (min 1/max 90, N contiguous oldest-first UTC buckets), AC3 (total + per-severity zero-fill), AC4 (reuses AlertSeverityCountsResponse ordering), AC5 (400 ValidationProblemDetails) are semantically satisfied, not superficially.
+- B. Architecture: PASS — correct controller → service → repository placement mirroring the summary endpoint; repository returns sparse grouped counts, service owns zero-fill and UTC-window derivation via injected TimeProvider; dependency direction and layering consistent with existing patterns.
+- C. Design & maintainability: PASS — DTOs mirror AlertSummaryResponse; named-tuple repository return matches GetSummaryAsync convention; no over-engineering or fragile shortcuts; constants used for day bounds.
+- D. API / Data / Configuration design: PASS — additive GET contract (days query, DateOnly buckets); no schema/migration (derived from existing CreatedDate + Severity); EF grouping pushed to the DB (no full-table load).
+- E. Testing strategy quality: PASS — behavior-driven coverage across all three layers: controller happy path + request pass-through + [Range] validation (0/-1/91 fail, 1/7/90 pass); service null-guard, default/min/max buckets, oldest-first contiguity, zero-fill of missing days+severities with summed totals, and exact half-open UTC window from a deterministic TimeProvider; repository empty case, group-by-day+severity non-zero-only, and from-inclusive/to-exclusive boundary. Tests validate behavior rather than merely passing.
+- Build: NOT_RUN (reused recorded result)
+- Unit tests: NOT_RUN (reused recorded result: API.Tests 81/81, Data.SQL.Tests 44/44)
+- Findings: None
+- Review: review.l1.status = PASS; 0 findings; return_after_testing = false
+- Loop: 0/3 — TESTS_PASSED
+- Next recommended command: None — AI review complete (L0 + L1 PASS); remaining merge/deploy steps are human-only
 
