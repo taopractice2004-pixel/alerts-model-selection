@@ -6,18 +6,18 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+PR_REVIEW
 
 | Stage | Status |
 |---|---|
 | Story Analysis | STAGE_PASSED |
 | Implementation | STAGE_PASSED |
-| Unit Testing | STAGE_PASSED |
+| Unit Testing | WAITING_FOR_HUMAN |
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | CHANGES_REQUIRED |
 
 ## Entries
 
@@ -75,5 +75,66 @@ PREPARE_PR
 - Review: Human PR creation required before review can begin
 - Loop: 0/3 — TESTS_PASSED
 - Standards notes: None
+- Deferred: None
+- Next recommended command: /l0-review ALERT-411
+
+### 2026-10-06 — /l0-review ALERT-411 — STAGE_PASSED
+- Summary: Reviewed the scoped ALERT-411 source, config, and test files from the cached work item and found no code-level scope, standards, quality, security, or static-check issues requiring changes.
+- Files changed: `.sdlc/work/ALERT-411/work.json`, `.sdlc/work/ALERT-411/log.md`
+- Review result: PASS
+- Findings: None
+- Build: NOT_RUN (reused recorded implementation result)
+- Unit tests: NOT_RUN (reused recorded unit-testing result)
+- Acceptance criteria: Reused prior `/unit-testing` result
+- Coverage: NOT_CONFIGURED
+- Bugs: None
+- Review: L0 PASS
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Reviewed against selected compact standards (`coding`, `backend-dotnet`) and repository patterns
+- Deferred: None
+- Next recommended command: /l1-review ALERT-411
+
+### 2026-10-06 — /l1-review ALERT-411 — CHANGES_REQUIRED
+- Summary: The duplicate-suppression approach is close to the approved design, but the create flow currently ignores the incoming request's `IsActive` value and can collapse an explicitly inactive create into an existing active alert.
+- Files changed: `.sdlc/work/ALERT-411/work.json`, `.sdlc/work/ALERT-411/log.md`
+- Review result: CHANGES_REQUIRED
+- Findings: ALERT-411-L1-F1 (MEDIUM)
+- Build: NOT_RUN (reused recorded implementation result)
+- Unit tests: NOT_RUN (reused recorded unit-testing result)
+- Acceptance criteria: Reused prior `/unit-testing` result
+- Coverage: NOT_CONFIGURED
+- Bugs: None
+- Review: L1 recorded 1 design/requirements finding
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Reviewed against selected compact standards (`service-architecture`, `api-rest`, `database`) and the approved plan
+- Deferred: None
+- Next recommended command: /address-review-comments ALERT-411 l1
+
+### 2026-10-06 — /address-review-comments ALERT-411 l1 — STAGE_PASSED
+- Summary: Resolved ALERT-411-L1-F1 by limiting duplicate suppression to active create requests and adding service coverage to prove inactive create requests persist a new alert even when a recent active match exists.
+- Files changed: `AlertService.API/Services/AlertManagementService.cs`, `AlertService.API.Tests/Services/AlertManagementServiceTests.cs`, `.sdlc/work/ALERT-411/work.json`, `.sdlc/work/ALERT-411/log.md`
+- Review result: Resolved findings ALERT-411-L1-F1
+- Build: `dotnet build AlertService.API/AlertService.API.csproj` — PASSED
+- Unit tests: NOT_RUN (verified in /unit-testing)
+- Acceptance criteria: NOT_RUN (re-verified in /unit-testing)
+- Coverage: NOT_RUN
+- Bugs: None
+- Review: `review.return_after_testing = true`; `review.origin = l1`; cycle 1/3
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Preserved the existing controller -> service -> repository split while fixing the business rule at the service seam
+- Deferred: None
+- Next recommended command: /unit-testing ALERT-411 current_story
+
+### 2026-10-06 — /unit-testing ALERT-411 current_story — WAITING_FOR_HUMAN
+- Summary: Revalidated the l1 review fix with the existing scoped controller, service, and repository unit tests, including the inactive incoming-request regression, and all acceptance criteria remain met.
+- Files changed: `.sdlc/work/ALERT-411/log.md`
+- Build: NOT_RUN (tests executed via `dotnet test`)
+- Unit tests: `dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter "FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests"` — PASSED (56/56); `dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter "FullyQualifiedName~AlertRepositoryTests"` — PASSED (33/33)
+- Acceptance criteria: AC1 MET; AC2 MET; AC3 MET; AC4 MET
+- Coverage: NOT_CONFIGURED
+- Bugs: None
+- Review: PASS after review fixes; `review.return_after_testing = true`; re-enter review from L0 after the PR is updated
+- Loop: 0/3 — TESTS_PASSED
+- Standards notes: Reused the existing scoped unit suites; no behavior-neutral testability seams were required
 - Deferred: None
 - Next recommended command: /l0-review ALERT-411

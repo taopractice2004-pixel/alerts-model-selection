@@ -92,23 +92,26 @@ public class AlertManagementService : IAlertService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var suppressionWindowMinutes = GetDuplicateSuppressionWindowMinutes();
-        var createdAfterUtc = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-suppressionWindowMinutes);
-        var existingAlert = await _repository.FindActiveDuplicateAsync(
-            request.Title,
-            request.Severity,
-            createdAfterUtc,
-            cancellationToken);
-
-        if (existingAlert is not null)
+        if (request.IsActive)
         {
-            _logger.LogInformation(
-                "Suppressed duplicate alert for title {AlertTitle} and severity {Severity} in favor of alert {AlertId}",
-                existingAlert.Title,
-                existingAlert.Severity,
-                existingAlert.Id);
+            var suppressionWindowMinutes = GetDuplicateSuppressionWindowMinutes();
+            var createdAfterUtc = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-suppressionWindowMinutes);
+            var existingAlert = await _repository.FindActiveDuplicateAsync(
+                request.Title,
+                request.Severity,
+                createdAfterUtc,
+                cancellationToken);
 
-            return (existingAlert.ToResponse(), true);
+            if (existingAlert is not null)
+            {
+                _logger.LogInformation(
+                    "Suppressed duplicate alert for title {AlertTitle} and severity {Severity} in favor of alert {AlertId}",
+                    existingAlert.Title,
+                    existingAlert.Severity,
+                    existingAlert.Id);
+
+                return (existingAlert.ToResponse(), true);
+            }
         }
 
         var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);

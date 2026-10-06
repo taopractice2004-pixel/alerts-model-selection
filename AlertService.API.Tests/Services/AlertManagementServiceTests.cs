@@ -324,6 +324,36 @@ public class AlertManagementServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenIncomingRequestIsInactive_SkipsDuplicateSuppressionAndPersistsAlert()
+    {
+        Alert? saved = null;
+
+        _repository.Setup(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()))
+            .Callback<Alert, CancellationToken>((alert, _) =>
+            {
+                saved = alert;
+                alert.Id = 101;
+            })
+            .ReturnsAsync((Alert alert, CancellationToken _) => alert);
+
+        var result = await _service.CreateAsync(new CreateAlertRequest
+        {
+            Title = " Memory leak ",
+            Severity = Severity.Critical,
+            Description = "Inactive follow-up",
+            IsActive = false
+        });
+
+        Assert.NotNull(saved);
+        Assert.False(saved!.IsActive);
+        Assert.False(result.DuplicateSuppressed);
+        Assert.Equal(101, result.Alert.Id);
+        Assert.False(result.Alert.IsActive);
+        _repository.Verify(r => r.FindActiveDuplicateAsync(It.IsAny<string>(), It.IsAny<Severity>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.AddAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task CreateAsync_UsesConfiguredSuppressionWindowForDuplicateLookup()
     {
         var service = CreateService(5);
