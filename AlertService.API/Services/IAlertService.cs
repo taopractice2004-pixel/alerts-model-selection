@@ -15,6 +15,12 @@ public interface IAlertService
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns daily alert-creation counts by severity for the last <c>request.Days</c> UTC calendar
+    /// days (oldest first), including zero-count days and severities.
+    /// </summary>
+    Task<AlertTrendsResponse> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates an alert, or suppresses it when it is a near-duplicate of a recent active alert.
     /// The result's <see cref="CreateAlertResult.Status"/> tells the controller whether to return
     /// 201 Created or a 200 OK duplicate-suppressed response.

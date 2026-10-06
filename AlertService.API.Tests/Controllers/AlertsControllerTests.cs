@@ -210,6 +210,88 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithTrends()
+    {
+        var request = new AlertTrendsQueryRequest();
+        var trends = new AlertTrendsResponse
+        {
+            Days = 7,
+            Trends = new List<AlertDailyTrendResponse>
+            {
+                new()
+                {
+                    Date = new DateOnly(2026, 9, 1),
+                    TotalCount = 3,
+                    SeverityCounts = new AlertSeverityCountsResponse { Low = 1, Medium = 0, High = 0, Critical = 2 }
+                }
+            }
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(trends);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertTrendsResponse>(ok.Value);
+        Assert.Equal(7, body.Days);
+        Assert.Single(body.Trends);
+        Assert.Equal(2, body.Trends[0].SeverityCounts.Critical);
+    }
+
+    [Fact]
+    public async Task GetTrends_PassesRequestToService()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 30 };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertTrendsResponse { Days = 30, Trends = new List<AlertDailyTrendResponse>() });
+
+        _ = await _controller.GetTrends(request, CancellationToken.None);
+
+        _service.Verify(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void AlertTrendsQueryRequest_DefaultsDaysTo7()
+    {
+        var request = new AlertTrendsQueryRequest();
+
+        Assert.Equal(7, request.Days);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(91)]
+    public void AlertTrendsQueryRequest_WithDaysOutOfRange_FailsValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertTrendsQueryRequest.Days)));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(90)]
+    public void AlertTrendsQueryRequest_WithDaysInRange_PassesValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.True(isValid);
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public async Task Create_WhenCreated_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };

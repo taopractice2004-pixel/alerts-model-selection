@@ -1,6 +1,7 @@
 using AlertService.API.Configuration;
 using AlertService.API.Mappings;
 using AlertService.Common.Constants;
+using AlertService.Common.Enums;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -83,6 +84,49 @@ public class AlertManagementService : IAlertService
                 High = summary.HighCount,
                 Critical = summary.CriticalCount
             }
+        };
+    }
+
+    public async Task<AlertTrendsResponse> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var days = request.Days;
+        var todayUtc = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
+        var startDay = todayUtc.AddDays(-(days - 1));
+
+        var fromUtcInclusive = startDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toUtcExclusive = todayUtc.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        var counts = await _repository.GetDailySeverityCountsAsync(fromUtcInclusive, toUtcExclusive, cancellationToken);
+        var countsByDayAndSeverity = counts.ToDictionary(
+            row => (DateOnly.FromDateTime(row.Day), row.Severity),
+            row => row.Count);
+
+        var trends = new List<AlertDailyTrendResponse>(days);
+        for (var offset = 0; offset < days; offset++)
+        {
+            var day = startDay.AddDays(offset);
+            var severityCounts = new AlertSeverityCountsResponse
+            {
+                Low = countsByDayAndSeverity.GetValueOrDefault((day, Severity.Low)),
+                Medium = countsByDayAndSeverity.GetValueOrDefault((day, Severity.Medium)),
+                High = countsByDayAndSeverity.GetValueOrDefault((day, Severity.High)),
+                Critical = countsByDayAndSeverity.GetValueOrDefault((day, Severity.Critical))
+            };
+
+            trends.Add(new AlertDailyTrendResponse
+            {
+                Date = day,
+                TotalCount = severityCounts.Low + severityCounts.Medium + severityCounts.High + severityCounts.Critical,
+                SeverityCounts = severityCounts
+            });
+        }
+
+        return new AlertTrendsResponse
+        {
+            Days = days,
+            Trends = trends
         };
     }
 

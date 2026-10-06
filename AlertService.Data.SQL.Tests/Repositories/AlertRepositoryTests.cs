@@ -404,6 +404,51 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDailySeverityCountsAsync_WhenNoAlerts_ReturnsEmpty()
+    {
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetDailySeverityCountsAsync_GroupsByUtcDayAndSeverity_ReturningNonZeroCombosOnly()
+    {
+        await _repository.AddAsync(NewAlert("Low morning", Severity.Low, new DateTime(2026, 8, 26, 2, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Low evening", Severity.Low, new DateTime(2026, 8, 26, 22, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("High same day", Severity.High, new DateTime(2026, 8, 26, 5, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("Critical later day", Severity.Critical, new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(3, result.Count);
+        Assert.Contains(result, r => r.Day == new DateTime(2026, 8, 26) && r.Severity == Severity.Low && r.Count == 2);
+        Assert.Contains(result, r => r.Day == new DateTime(2026, 8, 26) && r.Severity == Severity.High && r.Count == 1);
+        Assert.Contains(result, r => r.Day == new DateTime(2026, 9, 1) && r.Severity == Severity.Critical && r.Count == 1);
+    }
+
+    [Fact]
+    public async Task GetDailySeverityCountsAsync_AppliesHalfOpenWindow_IncludingFromExcludingTo()
+    {
+        await _repository.AddAsync(NewAlert("Before window", Severity.Medium, new DateTime(2026, 8, 25, 23, 59, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("At from boundary", Severity.Medium, new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("At to boundary", Severity.Medium, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetDailySeverityCountsAsync(
+            new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Single(result);
+        Assert.Equal(new DateTime(2026, 8, 26), result[0].Day);
+        Assert.Equal(Severity.Medium, result[0].Severity);
+        Assert.Equal(1, result[0].Count);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));

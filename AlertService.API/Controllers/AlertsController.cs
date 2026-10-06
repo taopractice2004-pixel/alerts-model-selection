@@ -49,6 +49,16 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>Gets daily alert-creation counts by severity for the last N UTC days (oldest first).</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(AlertTrendsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AlertTrendsResponse>> GetTrends([FromQuery] AlertTrendsQueryRequest request, CancellationToken cancellationToken)
+    {
+        var trends = await _alertService.GetTrendsAsync(request, cancellationToken);
+        return Ok(trends);
+    }
+
     /// <summary>Creates a new alert, or suppresses a near-duplicate of a recent active alert.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]

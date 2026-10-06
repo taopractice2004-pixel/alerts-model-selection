@@ -25,6 +25,16 @@ public interface IAlertRepository
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Returns alert-creation counts grouped by UTC calendar day and severity for alerts created
+    /// in the half-open window [<paramref name="fromUtcInclusive"/>, <paramref name="toUtcExclusive"/>).
+    /// Only day/severity combinations with at least one alert are returned; zero-fill is applied by the caller.
+    /// </summary>
+    Task<IReadOnlyList<(DateTime Day, Severity Severity, int Count)>> GetDailySeverityCountsAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        CancellationToken cancellationToken = default);
+
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
     /// <summary>
