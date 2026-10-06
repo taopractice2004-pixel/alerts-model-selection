@@ -4,6 +4,7 @@ using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -17,6 +18,10 @@ public class AlertsControllerTests
     public AlertsControllerTests()
     {
         _controller = new AlertsController(_service.Object);
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
     }
 
     private static PagedResponse<AlertResponse> SamplePagedResponse(params AlertResponse[] items) => new()
@@ -35,7 +40,8 @@ public class AlertsControllerTests
         Description = "85% used",
         Severity = Severity.High,
         CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-        IsActive = true
+        IsActive = true,
+        Tags = new List<string> { "ops" }
     };
 
     [Fact]
@@ -66,7 +72,8 @@ public class AlertsControllerTests
             PageSize = 10,
             SortBy = "title",
             SortDirection = "asc",
-            Search = "disk"
+            Search = "disk",
+            Tag = "ops"
         };
         _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse(SampleResponse(1)));
 
@@ -103,7 +110,8 @@ public class AlertsControllerTests
             PageSize = 101,
             SortBy = "status",
             SortDirection = "sideways",
-            Search = new string('x', 201)
+            Search = new string('x', 201),
+            Tag = " "
         };
 
         var context = new ValidationContext(request);
@@ -117,6 +125,46 @@ public class AlertsControllerTests
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.SortBy)));
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.SortDirection)));
         Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Search)));
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithReservedPathCharacterInTag_FailsValidation()
+    {
+        var request = new AlertQueryRequest
+        {
+            Tag = "ops/db"
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithInvalidTags_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest
+        {
+            Tags = new List<string>
+            {
+                "   ",
+                new string('x', 31),
+                "ops/db"
+            }
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Equal(3, results.Count(r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags))));
     }
 
     [Theory]
@@ -209,10 +257,68 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithTypedBuckets()
+    {
+        var request = new AlertTrendQueryRequest { Days = 3 };
+        var trends = new List<AlertTrendBucketResponse>
+        {
+            new()
+            {
+                Date = new DateOnly(2026, 8, 30),
+                TotalCount = 2,
+                SeverityCounts = new AlertSeverityCountsResponse
+                {
+                    Low = 1,
+                    Medium = 0,
+                    High = 1,
+                    Critical = 0
+                }
+            }
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(trends);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsAssignableFrom<IReadOnlyList<AlertTrendBucketResponse>>(ok.Value);
+        Assert.Single(body);
+        Assert.Equal(new DateOnly(2026, 8, 30), body[0].Date);
+        Assert.Equal(1, body[0].SeverityCounts.Low);
+        Assert.Equal(1, body[0].SeverityCounts.High);
+    }
+
+    [Fact]
+    public void AlertTrendQueryRequest_UsesSevenDayDefault()
+    {
+        var request = new AlertTrendQueryRequest();
+
+        Assert.Equal(7, request.Days);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(91)]
+    public void AlertTrendQueryRequest_WithOutOfRangeDays_FailsValidation(int days)
+    {
+        var request = new AlertTrendQueryRequest
+        {
+            Days = days
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, result => result.MemberNames.Contains(nameof(AlertTrendQueryRequest.Days)));
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync((SampleResponse(5), false));
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -220,6 +326,74 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+        Assert.False(_controller.Response.Headers.ContainsKey("X-Duplicate-Suppressed"));
+    }
+
+    [Fact]
+    public async Task Create_WhenDuplicateSuppressed_ReturnsOkWithHeader()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync((SampleResponse(7), true));
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(7, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal("true", Assert.Single(_controller.Response.Headers["X-Duplicate-Suppressed"]));
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSuccessful_ReturnsOkWithUpdatedAlert()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops", "security" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTagAddResult
+        {
+            Alert = new AlertResponse
+            {
+                Id = 1,
+                Title = "Disk usage high",
+                Severity = Severity.High,
+                CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                IsActive = true,
+                Tags = new List<string> { "ops", "security" }
+            }
+        });
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "ops", "security" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops" } };
+        _service.Setup(s => s.AddTagsAsync(42, request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTagAddResult
+        {
+            AlertNotFound = true
+        });
+
+        var result = await _controller.AddTags(42, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenValidationFails_ReturnsValidationProblem()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string> { "ops" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(new AlertTagAddResult
+        {
+            ValidationError = "An alert can have at most 10 tags."
+        });
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result);
+        Assert.Contains(nameof(request.Tags), _controller.ModelState.Keys);
+        Assert.Contains(_controller.ModelState[nameof(request.Tags)]!.Errors, error => error.ErrorMessage == "An alert can have at most 10 tags.");
     }
 
     [Fact]
@@ -282,5 +456,40 @@ public class AlertsControllerTests
         var result = await _controller.Delete(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteTag_WhenFound_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.DeleteTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteTag_WhenMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "ops", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.DeleteTag(1, "ops", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    [InlineData("1234567890123456789012345678901")]
+    [InlineData("ops/db")]
+    public async Task DeleteTag_WithInvalidTag_ReturnsValidationProblem(string tag)
+    {
+        var result = await _controller.DeleteTag(1, tag, CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
+        Assert.Contains("tag", _controller.ModelState.Keys);
+        Assert.NotEmpty(_controller.ModelState["tag"]!.Errors);
+        _service.Verify(s => s.RemoveTagAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

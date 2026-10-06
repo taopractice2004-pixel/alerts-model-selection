@@ -5,6 +5,9 @@ public static class AlertConstants
     public const int DefaultPageNumber = 1;
     public const int DefaultPageSize = 20;
     public const int MaxPageSize = 100;
+    public const int DefaultTrendDays = 7;
+    public const int MinTrendDays = 1;
+    public const int MaxTrendDays = 90;
     public const int SearchMaxLength = 200;
     public const string SortByCreatedDate = "createdDate";
     public const string SortBySeverity = "severity";
@@ -14,6 +17,10 @@ public static class AlertConstants
     public const string SortByPattern = "^(?i)(createdDate|severity|title)$";
     public const string SortDirectionPattern = "^(?i)(asc|desc)$";
     public const string NonWhitespacePattern = @"^[\s\S]*\S[\s\S]*$";
+    public const string TagRouteSafePattern = @"^[^/\\?#]*$";
     public const int TitleMaxLength = 200;
     public const int DescriptionMaxLength = 1000;
+    public const int TagMaxLength = 30;
+    public const int MaxTagsPerAlert = 10;
+    public const string TagRouteSafeMessage = "Tag values cannot contain '/', '\\', '?' or '#'.";
 }

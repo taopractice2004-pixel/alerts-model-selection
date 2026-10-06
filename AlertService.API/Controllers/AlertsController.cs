@@ -1,7 +1,9 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.RegularExpressions;
 
 namespace AlertService.API.Controllers;
 
@@ -46,14 +48,53 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>Gets daily alert-creation counts for the last N UTC calendar days.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(IReadOnlyList<AlertTrendBucketResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AlertTrendBucketResponse>>> GetTrends([FromQuery] AlertTrendQueryRequest request, CancellationToken cancellationToken)
+    {
+        var trends = await _alertService.GetTrendsAsync(request, cancellationToken);
+        return Ok(trends);
+    }
+
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
-        var created = await _alertService.CreateAsync(request, cancellationToken);
-        return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
+        var result = await _alertService.CreateAsync(request, cancellationToken);
+        if (result.DuplicateSuppressed)
+        {
+            Response.Headers.Append("X-Duplicate-Suppressed", "true");
+            return Ok(result.Alert);
+        }
+
+        return CreatedAtRoute(nameof(GetById), new { id = result.Alert.Id }, result.Alert);
+    }
+
+    /// <summary>Adds one or more tags to an existing alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _alertService.AddTagsAsync(id, request, cancellationToken);
+        if (result.AlertNotFound)
+        {
+            return NotFound();
+        }
+
+        if (!string.IsNullOrEmpty(result.ValidationError))
+        {
+            ModelState.AddModelError(nameof(request.Tags), result.ValidationError);
+            return ValidationProblem(ModelState);
+        }
+
+        return Ok(result.Alert);
     }
 
     /// <summary>Updates an existing alert.</summary>
@@ -84,6 +125,29 @@ public class AlertsController : ControllerBase
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
+        return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>Removes a tag assignment from an existing alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || tag.Trim().Length > AlertConstants.TagMaxLength)
+        {
+            ModelState.AddModelError(nameof(tag), $"Tag values must be between 1 and {AlertConstants.TagMaxLength} characters after trimming.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!Regex.IsMatch(tag.Trim(), AlertConstants.TagRouteSafePattern))
+        {
+            ModelState.AddModelError(nameof(tag), AlertConstants.TagRouteSafeMessage);
+            return ValidationProblem(ModelState);
+        }
+
+        var deleted = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
         return deleted ? NoContent() : NotFound();
     }
 }

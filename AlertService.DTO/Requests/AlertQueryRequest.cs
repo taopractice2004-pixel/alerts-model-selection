@@ -30,6 +30,10 @@ public class AlertQueryRequest : IValidatableObject
     [StringLength(AlertConstants.SearchMaxLength)]
     public string? Search { get; set; }
 
+    [RegularExpression(AlertConstants.NonWhitespacePattern)]
+    [StringLength(AlertConstants.TagMaxLength, MinimumLength = 1)]
+    public string? Tag { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (CreatedFrom.HasValue && CreatedTo.HasValue && CreatedFrom.Value > CreatedTo.Value)
@@ -37,6 +41,13 @@ public class AlertQueryRequest : IValidatableObject
             yield return new ValidationResult(
                 "CreatedFrom must be less than or equal to CreatedTo.",
                 new[] { nameof(CreatedFrom), nameof(CreatedTo) });
+        }
+
+        if (!string.IsNullOrWhiteSpace(Tag) && !System.Text.RegularExpressions.Regex.IsMatch(Tag.Trim(), AlertConstants.TagRouteSafePattern))
+        {
+            yield return new ValidationResult(
+                AlertConstants.TagRouteSafeMessage,
+                new[] { nameof(Tag) });
         }
     }
 }

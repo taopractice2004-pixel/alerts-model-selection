@@ -228,6 +228,33 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAllAsync_WithTag_ComposesWithExistingFilters()
+    {
+        var diskOps = await _repository.AddAsync(NewAlert("Disk full", Severity.Critical, new DateTime(2026, 2, 20, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var diskInfra = await _repository.AddAsync(NewAlert("Disk warning", Severity.Critical, new DateTime(2026, 2, 21, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var cpuOps = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical, new DateTime(2026, 2, 22, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var inactiveOps = await _repository.AddAsync(NewAlert("Disk offline", Severity.Critical, new DateTime(2026, 2, 23, 0, 0, 0, DateTimeKind.Utc), isActive: false));
+
+        await _repository.AddTagsAsync(diskOps, new[] { "ops" });
+        await _repository.AddTagsAsync(diskInfra, new[] { "infra" });
+        await _repository.AddTagsAsync(cpuOps, new[] { "ops" });
+        await _repository.AddTagsAsync(inactiveOps, new[] { "ops" });
+
+        var result = await _repository.GetAllAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            createdTo: new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
+            search: "disk",
+            tag: "ops");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Disk full", result.Items[0].Title);
+        Assert.Equal(new[] { "ops" }, result.Items[0].Tags.Select(tag => tag.Name));
+    }
+
+    [Fact]
     public async Task GetAllAsync_WithSortByTitleAscending_ReturnsAlphabeticalPage()
     {
         await _repository.AddAsync(NewAlert("Zulu", Severity.High, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
@@ -312,15 +339,167 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDailyTrendsAsync_GroupsByUtcDay_ReturnsSeverityBreakdown_AndUsesExclusiveEndBoundary()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AlertDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new AlertDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new AlertRepository(context);
+
+        await repository.AddAsync(NewAlert("Before range", Severity.Low, new DateTime(2026, 8, 30, 23, 59, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("First day medium", Severity.Medium, new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("First day high", Severity.High, new DateTime(2026, 8, 31, 10, 0, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("Second day critical", Severity.Critical, new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc)));
+        await repository.AddAsync(NewAlert("Excluded end boundary", Severity.Low, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await repository.GetDailyTrendsAsync(
+            new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(2, result.Count);
+
+        Assert.Equal(new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc), result[0].Date);
+        Assert.Equal(2, result[0].TotalCount);
+        Assert.Equal(0, result[0].LowCount);
+        Assert.Equal(1, result[0].MediumCount);
+        Assert.Equal(1, result[0].HighCount);
+        Assert.Equal(0, result[0].CriticalCount);
+
+        Assert.Equal(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), result[1].Date);
+        Assert.Equal(1, result[1].TotalCount);
+        Assert.Equal(0, result[1].LowCount);
+        Assert.Equal(0, result[1].MediumCount);
+        Assert.Equal(0, result[1].HighCount);
+        Assert.Equal(1, result[1].CriticalCount);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
+        await _repository.AddTagsAsync(added, new[] { "ops", "zeta" });
 
         var result = await _repository.GetByIdAsync(added.Id);
 
         Assert.NotNull(result);
         Assert.Equal("CPU spike", result!.Title);
         Assert.Equal(Severity.Critical, result.Severity);
+        Assert.Equal(new[] { "ops", "zeta" }, result.Tags.Select(tag => tag.Name).OrderBy(name => name).ToArray());
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_ReturnsNewestCaseInsensitiveActiveMatchWithinWindow()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 50, 0, DateTimeKind.Utc), isActive: true));
+        var newest = await _repository.AddAsync(NewAlert("DISK FULL", Severity.High, new DateTime(2026, 1, 1, 11, 58, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 40, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindActiveDuplicateAsync(
+            "  disk full  ",
+            Severity.High,
+            new DateTime(2026, 1, 1, 11, 45, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(result);
+        Assert.Equal(newest.Id, result!.Id);
+        Assert.Equal("DISK FULL", result.Title);
+    }
+
+    [Fact]
+    public async Task FindActiveDuplicateAsync_IgnoresInactiveDifferentSeverityAndOlderMatches()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 58, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.Critical, new DateTime(2026, 1, 1, 11, 58, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, new DateTime(2026, 1, 1, 11, 40, 0, DateTimeKind.Utc), isActive: true));
+
+        var result = await _repository.FindActiveDuplicateAsync(
+            "disk full",
+            Severity.High,
+            new DateTime(2026, 1, 1, 11, 45, 0, DateTimeKind.Utc));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_CreatesNewTags_AssignsThem_AndSkipsDuplicates()
+    {
+        var added = await _repository.AddAsync(NewAlert());
+
+        await _repository.AddTagsAsync(added, new[] { "ops", "security", "ops" });
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(added.Id);
+
+        Assert.NotNull(reloaded);
+        Assert.Equal(new[] { "ops", "security" }, reloaded!.Tags.Select(tag => tag.Name).OrderBy(name => name).ToArray());
+        Assert.Equal(2, await _context.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_ReusesExistingTagEntityAcrossAlerts()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+
+        await _repository.AddTagsAsync(first, new[] { "ops" });
+        await _repository.AddTagsAsync(second, new[] { "ops" });
+
+        _context.ChangeTracker.Clear();
+
+        Assert.Equal(1, await _context.Tags.CountAsync());
+        Assert.Equal(2, await _context.Alerts.CountAsync(alert => alert.Tags.Any(tag => tag.Name == "ops")));
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_RemovesAssignment_AndDeletesOrphanedTag()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert, new[] { "ops" });
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, "ops");
+
+        Assert.True(removed);
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+        Assert.NotNull(reloaded);
+        Assert.Empty(reloaded!.Tags);
+        Assert.Equal(0, await _context.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenTagSharedAcrossAlerts_OnlyRemovesAssignment()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+        await _repository.AddTagsAsync(first, new[] { "ops" });
+        await _repository.AddTagsAsync(second, new[] { "ops" });
+
+        var removed = await _repository.RemoveTagAsync(first.Id, "ops");
+
+        Assert.True(removed);
+        _context.ChangeTracker.Clear();
+        Assert.Equal(1, await _context.Tags.CountAsync());
+        var remainingAlert = await _repository.GetByIdAsync(second.Id);
+        Assert.NotNull(remainingAlert);
+        Assert.Equal(new[] { "ops" }, remainingAlert!.Tags.Select(tag => tag.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAlertOrTagMissing_ReturnsFalse()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+
+        var missingTag = await _repository.RemoveTagAsync(alert.Id, "ops");
+        var missingAlert = await _repository.RemoveTagAsync(999, "ops");
+
+        Assert.False(missingTag);
+        Assert.False(missingAlert);
     }
 
     [Fact]

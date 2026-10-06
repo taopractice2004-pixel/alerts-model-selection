@@ -21,6 +21,7 @@ public class AlertRepository : IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
         int page = AlertConstants.DefaultPageNumber,
@@ -55,10 +56,16 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
         }
 
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            query = query.Where(a => a.Tags.Any(alertTag => alertTag.Name == tag));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
+            .Include(a => a.Tags)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -87,6 +94,32 @@ public class AlertRepository : IAlertRepository
         return summary is null
             ? (0, 0, 0, 0, 0, 0, 0)
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
+    }
+
+    public async Task<IReadOnlyList<(DateTime Date, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>> GetDailyTrendsAsync(
+        DateTime startDateUtc,
+        DateTime endDateExclusiveUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var dailyBuckets = await _context.Alerts
+            .AsNoTracking()
+            .Where(alert => alert.CreatedDate >= startDateUtc && alert.CreatedDate < endDateExclusiveUtc)
+            .GroupBy(alert => alert.CreatedDate.Date)
+            .Select(group => new
+            {
+                Date = group.Key,
+                TotalCount = group.Count(),
+                LowCount = group.Count(alert => alert.Severity == Severity.Low),
+                MediumCount = group.Count(alert => alert.Severity == Severity.Medium),
+                HighCount = group.Count(alert => alert.Severity == Severity.High),
+                CriticalCount = group.Count(alert => alert.Severity == Severity.Critical)
+            })
+            .OrderBy(bucket => bucket.Date)
+            .ToListAsync(cancellationToken);
+
+        return dailyBuckets
+            .Select(bucket => (bucket.Date, bucket.TotalCount, bucket.LowCount, bucket.MediumCount, bucket.HighCount, bucket.CriticalCount))
+            .ToList();
     }
 
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
@@ -124,7 +157,21 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public Task<Alert?> FindActiveDuplicateAsync(string title, Severity severity, DateTime createdAfterUtc, CancellationToken cancellationToken = default)
+    {
+        var normalizedTitle = title.Trim().ToLower();
+
+        return _context.Alerts
+            .AsNoTracking()
+            .Include(a => a.Tags)
+            .Where(a => a.IsActive && a.Severity == severity && a.CreatedDate >= createdAfterUtc)
+            .OrderByDescending(a => a.CreatedDate)
+            .FirstOrDefaultAsync(a => a.Title.ToLower() == normalizedTitle, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -132,6 +179,47 @@ public class AlertRepository : IAlertRepository
         await _context.Alerts.AddAsync(alert, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return alert;
+    }
+
+    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        if (tags.Count == 0)
+        {
+            return;
+        }
+
+        await _context.Entry(alert).Collection(a => a.Tags).LoadAsync(cancellationToken);
+
+        var existingTags = await _context.Tags
+            .Where(tag => tags.Contains(tag.Name))
+            .ToListAsync(cancellationToken);
+
+        var existingTagsByName = existingTags.ToDictionary(tag => tag.Name, StringComparer.Ordinal);
+        var assignedTagNames = alert.Tags
+            .Select(tag => tag.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var tagName in tags)
+        {
+            if (assignedTagNames.Contains(tagName))
+            {
+                continue;
+            }
+
+            if (!existingTagsByName.TryGetValue(tagName, out var tagEntity))
+            {
+                tagEntity = new Tag
+                {
+                    Name = tagName
+                };
+                existingTagsByName[tagName] = tagEntity;
+            }
+
+            alert.Tags.Add(tagEntity);
+            assignedTagNames.Add(tagName);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -144,5 +232,35 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(int alertId, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _context.Alerts
+            .Include(a => a.Tags)
+            .ThenInclude(alertTag => alertTag.Alerts)
+            .FirstOrDefaultAsync(a => a.Id == alertId, cancellationToken);
+
+        if (alert is null)
+        {
+            return false;
+        }
+
+        var tagEntity = alert.Tags.FirstOrDefault(alertTag => alertTag.Name == tag);
+        if (tagEntity is null)
+        {
+            return false;
+        }
+
+        var deleteTagEntity = tagEntity.Alerts.Count == 1;
+        alert.Tags.Remove(tagEntity);
+
+        if (deleteTagEntity)
+        {
+            _context.Tags.Remove(tagEntity);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

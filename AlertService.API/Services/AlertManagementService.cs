@@ -1,25 +1,33 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.Extensions.Configuration;
+using System.Text.RegularExpressions;
 
 namespace AlertService.API.Services;
 
 // Named AlertManagementService (not "AlertService") to avoid clashing with the root namespace.
 public class AlertManagementService : IAlertService
 {
+    private const string DuplicateSuppressionWindowMinutesKey = "Alerts:DuplicateSuppressionWindowMinutes";
+
     private readonly IAlertRepository _repository;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AlertManagementService> _logger;
+    private readonly IConfiguration _configuration;
 
     public AlertManagementService(
         IAlertRepository repository,
         TimeProvider timeProvider,
-        ILogger<AlertManagementService> logger)
+        ILogger<AlertManagementService> logger,
+        IConfiguration configuration)
     {
         _repository = repository;
         _timeProvider = timeProvider;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task<PagedResponse<AlertResponse>> GetAllAsync(AlertQueryRequest request, CancellationToken cancellationToken = default)
@@ -32,6 +40,7 @@ public class AlertManagementService : IAlertService
             request.CreatedFrom,
             request.CreatedTo,
             request.Search,
+            NormalizeOptionalTag(request.Tag),
             request.SortBy,
             request.SortDirection,
             request.Page,
@@ -79,15 +88,128 @@ public class AlertManagementService : IAlertService
         };
     }
 
-    public async Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AlertTrendBucketResponse>> GetTrendsAsync(AlertTrendQueryRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        var todayUtc = _timeProvider.GetUtcNow().UtcDateTime.Date;
+        var startDateUtc = todayUtc.AddDays(1 - request.Days);
+        var endDateExclusiveUtc = todayUtc.AddDays(1);
+        var storedBuckets = await _repository.GetDailyTrendsAsync(startDateUtc, endDateExclusiveUtc, cancellationToken);
+        var bucketsByDate = storedBuckets.ToDictionary(bucket => DateOnly.FromDateTime(bucket.Date));
+        var trends = new List<AlertTrendBucketResponse>(request.Days);
+
+        for (var offset = 0; offset < request.Days; offset++)
+        {
+            var bucketDate = DateOnly.FromDateTime(startDateUtc.AddDays(offset));
+            if (bucketsByDate.TryGetValue(bucketDate, out var bucket))
+            {
+                trends.Add(new AlertTrendBucketResponse
+                {
+                    Date = bucketDate,
+                    TotalCount = bucket.TotalCount,
+                    SeverityCounts = MapSeverityCounts(bucket.LowCount, bucket.MediumCount, bucket.HighCount, bucket.CriticalCount)
+                });
+
+                continue;
+            }
+
+            trends.Add(new AlertTrendBucketResponse
+            {
+                Date = bucketDate,
+                TotalCount = 0,
+                SeverityCounts = MapSeverityCounts(0, 0, 0, 0)
+            });
+        }
+
+        return trends;
+    }
+
+    public async Task<(AlertResponse Alert, bool DuplicateSuppressed)> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.IsActive)
+        {
+            var suppressionWindowMinutes = GetDuplicateSuppressionWindowMinutes();
+            var createdAfterUtc = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-suppressionWindowMinutes);
+            var existingAlert = await _repository.FindActiveDuplicateAsync(
+                request.Title,
+                request.Severity,
+                createdAfterUtc,
+                cancellationToken);
+
+            if (existingAlert is not null)
+            {
+                _logger.LogInformation(
+                    "Suppressed duplicate alert for title {AlertTitle} and severity {Severity} in favor of alert {AlertId}",
+                    existingAlert.Title,
+                    existingAlert.Severity,
+                    existingAlert.Id);
+
+                return (existingAlert.ToResponse(), true);
+            }
+        }
 
         var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);
         var created = await _repository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation("Created alert {AlertId} with severity {Severity}", created.Id, created.Severity);
-        return created.ToResponse();
+        return (created.ToResponse(), false);
+    }
+
+    public async Task<AlertTagAddResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var normalizedTags = NormalizeTags(request.Tags);
+        if (normalizedTags.Length == 0)
+        {
+            return new AlertTagAddResult
+            {
+                ValidationError = "At least one tag is required."
+            };
+        }
+
+        if (normalizedTags.Any(tag => !Regex.IsMatch(tag, AlertConstants.TagRouteSafePattern)))
+        {
+            return new AlertTagAddResult
+            {
+                ValidationError = AlertConstants.TagRouteSafeMessage
+            };
+        }
+
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return new AlertTagAddResult
+            {
+                AlertNotFound = true
+            };
+        }
+
+        var totalUniqueTags = alert.Tags
+            .Select(tag => tag.Name)
+            .Concat(normalizedTags)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+
+        if (totalUniqueTags > AlertConstants.MaxTagsPerAlert)
+        {
+            return new AlertTagAddResult
+            {
+                ValidationError = $"An alert can have at most {AlertConstants.MaxTagsPerAlert} tags."
+            };
+        }
+
+        await _repository.AddTagsAsync(alert, normalizedTags, cancellationToken);
+
+        _logger.LogInformation("Added {TagCount} tags to alert {AlertId}", normalizedTags.Length, id);
+        return new AlertTagAddResult
+        {
+            Alert = alert.ToResponse()
+        };
     }
 
     public async Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default)
@@ -142,5 +264,59 @@ public class AlertManagementService : IAlertService
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
+    }
+
+    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var removed = await _repository.RemoveTagAsync(id, NormalizeTag(tag), cancellationToken);
+        if (!removed)
+        {
+            _logger.LogWarning("Cannot remove tag from alert {AlertId}: alert or tag was not found", id);
+            return false;
+        }
+
+        _logger.LogInformation("Removed tag {Tag} from alert {AlertId}", tag, id);
+        return true;
+    }
+
+    private static string[] NormalizeTags(IEnumerable<string> tags)
+    {
+        return tags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(NormalizeTag)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static string? NormalizeOptionalTag(string? tag)
+    {
+        return string.IsNullOrWhiteSpace(tag) ? null : NormalizeTag(tag);
+    }
+
+    private static string NormalizeTag(string tag)
+    {
+        return tag.Trim().ToLowerInvariant();
+    }
+
+    private static AlertSeverityCountsResponse MapSeverityCounts(int lowCount, int mediumCount, int highCount, int criticalCount)
+    {
+        return new AlertSeverityCountsResponse
+        {
+            Low = lowCount,
+            Medium = mediumCount,
+            High = highCount,
+            Critical = criticalCount
+        };
+    }
+
+    private int GetDuplicateSuppressionWindowMinutes()
+    {
+        var suppressionWindowMinutes = _configuration.GetValue<int?>(DuplicateSuppressionWindowMinutesKey);
+        if (!suppressionWindowMinutes.HasValue || suppressionWindowMinutes.Value <= 0)
+        {
+            throw new InvalidOperationException($"Configuration value '{DuplicateSuppressionWindowMinutesKey}' must be a positive integer.");
+        }
+
+        return suppressionWindowMinutes.Value;
     }
 }
