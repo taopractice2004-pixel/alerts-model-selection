@@ -4,6 +4,7 @@ using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -16,7 +17,10 @@ public class AlertsControllerTests
 
     public AlertsControllerTests()
     {
-        _controller = new AlertsController(_service.Object);
+        _controller = new AlertsController(_service.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     private static PagedResponse<AlertResponse> SamplePagedResponse(params AlertResponse[] items) => new()
@@ -209,10 +213,67 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithBuckets()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 2 };
+        IReadOnlyList<AlertTrendBucketResponse> buckets = new List<AlertTrendBucketResponse>
+        {
+            new() { Date = new DateOnly(2026, 8, 31), TotalCount = 0 },
+            new() { Date = new DateOnly(2026, 9, 1), TotalCount = 3, SeverityCounts = new AlertSeverityCountsResponse { High = 3 } }
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(buckets);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsAssignableFrom<IReadOnlyList<AlertTrendBucketResponse>>(ok.Value);
+        Assert.Equal(2, body.Count);
+        Assert.Equal(3, body[1].SeverityCounts.High);
+    }
+
+    [Fact]
+    public void AlertTrendsQueryRequest_DefaultsToSevenDays_AndIsValid()
+    {
+        var request = new AlertTrendsQueryRequest();
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.Equal(7, request.Days);
+        Assert.True(isValid);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(90)]
+    public void AlertTrendsQueryRequest_WithBoundaryDays_PassesValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.True(isValid);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(91)]
+    public void AlertTrendsQueryRequest_WithOutOfRangeDays_FailsValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertTrendsQueryRequest.Days)));
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
-        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SampleResponse(5));
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(5), false));
 
         var result = await _controller.Create(request, CancellationToken.None);
 
@@ -220,6 +281,20 @@ public class AlertsControllerTests
         Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
         Assert.Equal(5, created.RouteValues!["id"]);
         Assert.Equal(5, Assert.IsType<AlertResponse>(created.Value).Id);
+        Assert.False(_controller.Response.Headers.ContainsKey("X-Duplicate-Suppressed"));
+    }
+
+    [Fact]
+    public async Task Create_WhenDuplicateSuppressed_ReturnsOkWithExistingAlert_AndHeader()
+    {
+        var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };
+        _service.Setup(s => s.CreateAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new CreateAlertResult(SampleResponse(3), true));
+
+        var result = await _controller.Create(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(3, Assert.IsType<AlertResponse>(ok.Value).Id);
+        Assert.Equal("true", _controller.Response.Headers["X-Duplicate-Suppressed"].ToString());
     }
 
     [Fact]
@@ -280,6 +355,120 @@ public class AlertsControllerTests
         _service.Setup(s => s.DeleteAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await _controller.Delete(99, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task GetAll_PassesTagFilterToService()
+    {
+        var request = new AlertQueryRequest { Tag = "prod" };
+        _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse());
+
+        _ = await _controller.GetAll(request, CancellationToken.None);
+
+        _service.Verify(s => s.GetAllAsync(It.Is<AlertQueryRequest>(r => r.Tag == "prod"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagLongerThan30_FailsValidation()
+    {
+        var request = new AlertQueryRequest { Tag = new string('x', 31) };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagOf30Characters_PassesValidation()
+    {
+        var request = new AlertQueryRequest { Tag = new string('x', 30) };
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.True(isValid);
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithEmptyTags_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest { Tags = new List<string>() };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithMoreThan100Tags_FailsValidation()
+    {
+        var request = new AddAlertTagsRequest { Tags = Enumerable.Range(0, 101).Select(i => $"t{i}").ToList() };
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.False(isValid);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSuccess_ReturnsOkWithAlertIncludingTags()
+    {
+        var request = new AddAlertTagsRequest { Tags = new() { "prod" } };
+        var response = SampleResponse();
+        response.Tags = new List<string> { "prod" };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddAlertTagsResult.Success(response));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(new[] { "prod" }, Assert.IsType<AlertResponse>(ok.Value).Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = new AddAlertTagsRequest { Tags = new() { "prod" } };
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddAlertTagsResult.NotFound());
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenInvalid_ReturnsBadRequestValidationProblem()
+    {
+        var request = new AddAlertTagsRequest { Tags = new() { new string('x', 31) } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddAlertTagsResult.Invalid("bad tag"));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problem = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Equal("bad tag", problem.Errors[nameof(AddAlertTagsRequest.Tags)].Single());
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "prod", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAlertOrTagMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "nope", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(1, "nope", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }
