@@ -14,7 +14,8 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
-    Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
+    /// <returns>The created alert, or the existing active duplicate (flagged) when one was created within the suppression window.</returns>
+    Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
     Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default);

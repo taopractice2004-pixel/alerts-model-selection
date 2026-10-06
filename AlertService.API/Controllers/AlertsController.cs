@@ -10,6 +10,8 @@ namespace AlertService.API.Controllers;
 [Produces("application/json")]
 public class AlertsController : ControllerBase
 {
+    private const string DuplicateSuppressedHeader = "X-Duplicate-Suppressed";
+
     private readonly IAlertService _alertService;
 
     public AlertsController(IAlertService alertService)
@@ -49,11 +51,19 @@ public class AlertsController : ControllerBase
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
-        var created = await _alertService.CreateAsync(request, cancellationToken);
-        return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
+        var result = await _alertService.CreateAsync(request, cancellationToken);
+
+        if (result.DuplicateSuppressed)
+        {
+            Response.Headers[DuplicateSuppressedHeader] = "true";
+            return Ok(result.Alert);
+        }
+
+        return CreatedAtRoute(nameof(GetById), new { id = result.Alert.Id }, result.Alert);
     }
 
     /// <summary>Updates an existing alert.</summary>

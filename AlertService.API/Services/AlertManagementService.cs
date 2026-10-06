@@ -1,9 +1,11 @@
+using AlertService.API.Configuration;
 using AlertService.API.Mappings;
 using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using AlertService.Models;
+using Microsoft.Extensions.Options;
 
 namespace AlertService.API.Services;
 
@@ -12,15 +14,18 @@ public class AlertManagementService : IAlertService
 {
     private readonly IAlertRepository _repository;
     private readonly TimeProvider _timeProvider;
+    private readonly DuplicateSuppressionOptions _suppressionOptions;
     private readonly ILogger<AlertManagementService> _logger;
 
     public AlertManagementService(
         IAlertRepository repository,
         TimeProvider timeProvider,
+        IOptions<DuplicateSuppressionOptions> suppressionOptions,
         ILogger<AlertManagementService> logger)
     {
         _repository = repository;
         _timeProvider = timeProvider;
+        _suppressionOptions = suppressionOptions.Value;
         _logger = logger;
     }
 
@@ -82,15 +87,30 @@ public class AlertManagementService : IAlertService
         };
     }
 
-    public async Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
+    public async Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var alert = request.ToEntity(_timeProvider.GetUtcNow().UtcDateTime);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (_suppressionOptions.DuplicateWindowMinutes > 0)
+        {
+            var windowStart = now.AddMinutes(-_suppressionOptions.DuplicateWindowMinutes);
+            var duplicate = await _repository.FindRecentActiveDuplicateAsync(
+                request.Title.Trim(), request.Severity, windowStart, cancellationToken);
+
+            if (duplicate is not null)
+            {
+                _logger.LogInformation("Suppressed duplicate alert; returning existing alert {AlertId}", duplicate.Id);
+                return new CreateAlertResult(duplicate.ToResponse(), DuplicateSuppressed: true);
+            }
+        }
+
+        var alert = request.ToEntity(now);
         var created = await _repository.AddAsync(alert, cancellationToken);
 
         _logger.LogInformation("Created alert {AlertId} with severity {Severity}", created.Id, created.Severity);
-        return created.ToResponse();
+        return new CreateAlertResult(created.ToResponse(), DuplicateSuppressed: false);
     }
 
     public async Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default)

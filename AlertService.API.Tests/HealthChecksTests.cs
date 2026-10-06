@@ -1,11 +1,24 @@
 using System.Net;
 using System.Text.Json;
+using AlertService.API.Configuration;
 using AlertService.API.Tests.TestInfrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AlertService.API.Tests;
 
 public class HealthChecksTests
 {
+    [Fact]
+    public void DuplicateWindow_IsBoundFromAppSettings_DefaultingTo15()
+    {
+        using var factory = new HealthChecksWebApplicationFactory(sqlReachable: true);
+
+        var options = factory.Services.GetRequiredService<IOptions<DuplicateSuppressionOptions>>().Value;
+
+        Assert.Equal(15, options.DuplicateWindowMinutes);
+    }
+
     [Fact]
     public async Task Live_ReturnsHealthyWithoutTouchingSql()
     {

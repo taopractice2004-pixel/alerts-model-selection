@@ -1,0 +1,118 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-411",
+  "work_case": "AMBIGUOUS",
+  "relationship_mode": "empty",
+  "tracker": "ALERT",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Duplicate Alert Suppression Window: POST /api/alerts returns the existing active alert (200 + X-Duplicate-Suppressed: true) instead of creating a new row when an active alert with the same Title (case-insensitive) and Severity was created within a configurable window (default 15 min).",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "POST /api/alerts, when an active alert with the same Title (case-insensitive) and same Severity was created within the suppression window, does not insert a new row." },
+    { "id": "AC2", "text": "On suppression the response is 200 OK with the existing alert as the body and response header 'X-Duplicate-Suppressed: true'." },
+    { "id": "AC3", "text": "When no matching alert is within the window, POST /api/alerts still creates the alert and returns 201 Created (no X-Duplicate-Suppressed header)." },
+    { "id": "AC4", "text": "The suppression window in minutes is read from configuration in appsettings.json (not hardcoded); default value in appsettings.json is 15." },
+    { "id": "AC5", "text": "An alert with the same Title but a different Severity is not suppressed (new alert created, 201)." },
+    { "id": "AC6", "text": "A prior matching alert that is inactive (IsActive = false) does not suppress; a new alert is created (201)." },
+    { "id": "AC7", "text": "A matching active alert created before the window start (older than the configured minutes) does not suppress; a new alert is created (201)." }
+  ],
+  "scope_anchors": [
+    "POST /api/alerts -> AlertsController.Create",
+    "IAlertService.CreateAsync / AlertManagementService.CreateAsync",
+    "IAlertRepository + AlertRepository (new duplicate lookup: Title ci + Severity + IsActive + CreatedDate >= now - window)",
+    "Program.cs options binding + appsettings.json new section"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Configuration/DuplicateSuppressionOptions.cs (new)",
+    "AlertService.API/Services/CreateAlertResult.cs (new)",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.API/Program.cs",
+    "AlertService.API/appsettings.json"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.API/Mappings/AlertMappingExtensions.cs (ToEntity trims Title; ToResponse)",
+    "AlertService.Models/Alert.cs (Title, Severity, CreatedDate UTC, IsActive)",
+    "AlertService.Data.SQL/Configurations/AlertConfiguration.cs (existing IsActive index)",
+    "AlertService.API/AlertService.API.http",
+    "README.md (API route table / configuration notes)"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Scope exceeds the 5-source-file cap deliberately: the story crosses Controller, Service, Repository interface/impl, options and configuration.",
+    "Keep layering Controller -> IAlertService -> IAlertRepository -> AlertDbContext; controller stays HTTP-only (maps result to 200/201 and sets header); entities never leave the service layer.",
+    "Window comes from IOptions-bound configuration (e.g. 'AlertSuppression:DuplicateWindowMinutes'); no hardcoded 15 in code; validate at startup (non-negative; 0 disables suppression).",
+    "Use TimeProvider (already injected) for 'now'; CreatedDate is UTC.",
+    "Duplicate lookup must be a parameterized EF query (no raw SQL); compare Title case-insensitively consistent with existing repository search (ToLower); Title is trimmed in ToEntity so compare against the trimmed request title.",
+    "No schema change or migration expected; index review only if standards require (existing IsActive index).",
+    "Suppression must not alter validation: invalid requests still return 400 before the lookup.",
+    "Changing IAlertService.CreateAsync return type requires updating existing tests and the controller test.",
+    "No new third-party dependencies."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests",
+    "dotnet test AlertService.Data.SQL.Tests"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Every acceptance criterion AC1-AC7 covered by at least one passing test; suppress/create branches in service and controller, and the repository lookup filters (title case, severity, active, window boundary), covered at behavior level."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "NOT_STARTED",
+      "findings": []
+    },
+    "l1": {
+      "status": "NOT_STARTED",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "Configuration key name/section not specified (assumed 'AlertSuppression:DuplicateWindowMinutes' = 15)",
+    "Response body shape on suppression (assumed same AlertResponse of the existing alert; no Location header)"
+  ],
+  "unresolved_questions": [
+    "Window boundary: assumed an alert counts as 'within' when CreatedDate >= now - window (inclusive).",
+    "If several matches exist, assumed the most recent one is returned.",
+    "Window of 0 assumed to disable suppression; negative values rejected at startup.",
+    "Concurrent identical POSTs can still both insert (no unique constraint/lock); accepted as best-effort suppression unless a human requires stronger guarantees."
+  ]
+}

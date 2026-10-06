@@ -332,6 +332,70 @@ public class AlertRepositoryTests : IDisposable
         Assert.Null(result);
     }
 
+    private static readonly DateTime DupNow = new(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task FindRecentActiveDuplicateAsync_MatchesTitleCaseInsensitively_WithinWindow()
+    {
+        var added = await _repository.AddAsync(NewAlert("Disk Full", Severity.High, DupNow.AddMinutes(-5)));
+
+        var result = await _repository.FindRecentActiveDuplicateAsync("disk full", Severity.High, DupNow.AddMinutes(-15));
+
+        Assert.NotNull(result);
+        Assert.Equal(added.Id, result!.Id);
+    }
+
+    [Fact]
+    public async Task FindRecentActiveDuplicateAsync_DifferentSeverity_ReturnsNull()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, DupNow.AddMinutes(-5)));
+
+        var result = await _repository.FindRecentActiveDuplicateAsync("Disk full", Severity.Low, DupNow.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindRecentActiveDuplicateAsync_InactiveAlert_ReturnsNull()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, DupNow.AddMinutes(-5), isActive: false));
+
+        var result = await _repository.FindRecentActiveDuplicateAsync("Disk full", Severity.High, DupNow.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindRecentActiveDuplicateAsync_OlderThanWindow_ReturnsNull()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, DupNow.AddMinutes(-16)));
+
+        var result = await _repository.FindRecentActiveDuplicateAsync("Disk full", Severity.High, DupNow.AddMinutes(-15));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task FindRecentActiveDuplicateAsync_AtWindowBoundary_IsInclusive()
+    {
+        var added = await _repository.AddAsync(NewAlert("Disk full", Severity.High, DupNow.AddMinutes(-15)));
+
+        var result = await _repository.FindRecentActiveDuplicateAsync("Disk full", Severity.High, DupNow.AddMinutes(-15));
+
+        Assert.Equal(added.Id, result?.Id);
+    }
+
+    [Fact]
+    public async Task FindRecentActiveDuplicateAsync_MultipleMatches_ReturnsMostRecent()
+    {
+        await _repository.AddAsync(NewAlert("Disk full", Severity.High, DupNow.AddMinutes(-10)));
+        var newest = await _repository.AddAsync(NewAlert("Disk full", Severity.High, DupNow.AddMinutes(-2)));
+
+        var result = await _repository.FindRecentActiveDuplicateAsync("Disk full", Severity.High, DupNow.AddMinutes(-15));
+
+        Assert.Equal(newest.Id, result!.Id);
+    }
+
     [Fact]
     public async Task UpdateAsync_PersistsChanges()
     {
