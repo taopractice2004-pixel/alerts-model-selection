@@ -21,12 +21,39 @@ public interface IAlertRepository
         int pageSize = 20,
         CancellationToken cancellationToken = default);
 
+    Task<(IReadOnlyList<Alert> Items, int TotalCount)> GetAllAsync(
+        bool? isActive,
+        Severity? severity,
+        DateTime? createdFrom,
+        DateTime? createdTo,
+        string? search,
+        string sortBy,
+        string sortDirection,
+        int page,
+        int pageSize,
+        string? tag,
+        CancellationToken cancellationToken = default);
+
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<(DateOnly DateUtc, int TotalCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)>> GetTrendsAsync(
+        int days,
         CancellationToken cancellationToken = default);
 
     Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<Alert?> GetActiveDuplicateByTitleAndSeverityAsync(
+        string title,
+        Severity severity,
+        DateTime createdAfterUtc,
+        CancellationToken cancellationToken = default);
+
     Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(int alertId, string tagName, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 

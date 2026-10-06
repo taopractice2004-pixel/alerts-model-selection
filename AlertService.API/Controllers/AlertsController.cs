@@ -2,6 +2,7 @@ using AlertService.API.Services;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace AlertService.API.Controllers;
 
@@ -46,13 +47,36 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>Gets daily UTC alert volume trends for the last N days.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(IReadOnlyList<AlertTrendResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AlertTrendResponse>>> GetTrends(
+        [FromQuery]
+        [Range(1, 90)]
+        int? days,
+        CancellationToken cancellationToken)
+    {
+        var numberOfDays = days ?? 7;
+        var trends = await _alertService.GetTrendsAsync(numberOfDays, cancellationToken);
+        return Ok(trends);
+    }
+
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertResponse>> Create([FromBody] CreateAlertRequest request, CancellationToken cancellationToken)
     {
         var created = await _alertService.CreateAsync(request, cancellationToken);
+
+        if (created.IsDuplicateSuppressed)
+        {
+            Response.Headers.Append("X-Duplicate-Suppressed", "true");
+            return Ok(created);
+        }
+
         return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -75,6 +99,33 @@ public class AlertsController : ControllerBase
     {
         var deactivated = await _alertService.DeactivateAsync(id, cancellationToken);
         return deactivated is null ? NotFound() : Ok(deactivated);
+    }
+
+    /// <summary>Adds one or more tags to an existing alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var (alert, validationError) = await _alertService.AddTagsAsync(id, request.Tags, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(validationError))
+        {
+            ModelState.AddModelError(nameof(request.Tags), validationError);
+            return ValidationProblem(ModelState);
+        }
+
+        return alert is null ? NotFound() : Ok(alert);
+    }
+
+    /// <summary>Removes a tag assignment from an existing alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return removed ? NoContent() : NotFound();
     }
 
     /// <summary>Deletes an alert.</summary>

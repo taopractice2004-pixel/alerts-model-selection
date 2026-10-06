@@ -1,0 +1,109 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "work_case": "SIMPLE",
+  "relationship_mode": "standalone",
+  "tracker": "",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add GET /api/alerts/trends?days=N to return daily UTC alert-creation counts with severity breakdown for the last N days.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "GET /api/alerts/trends supports optional days query parameter with default 7 and valid range 1-90, and returns one bucket per UTC calendar day for the last N days (oldest first) with total count plus per-severity counts, including zero-count days and zero-count severities."
+    },
+    {
+      "id": "AC2",
+      "text": "Severity count output follows existing severity ordering conventions used by summary behavior (Low, Medium, High, Critical)."
+    },
+    {
+      "id": "AC3",
+      "text": "Invalid days values (non-numeric or out of range) return HTTP 400 with ValidationProblemDetails, consistent with existing query validation behavior."
+    }
+  ],
+  "scope_anchors": [
+    "AlertService.API/Controllers/AlertsController.cs::GetSummary",
+    "AlertService.API/Services/IAlertService.cs::GetSummaryAsync",
+    "AlertService.API/Services/AlertManagementService.cs::GetSummaryAsync",
+    "AlertService.Data/Interfaces/IAlertRepository.cs::GetSummaryAsync",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs::GetSummaryAsync"
+  ],
+  "exact_source_files": [
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Responses/AlertTrendResponse.cs (new)"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.Common/Enums/Severity.cs",
+    "AlertService.DTO/Responses/AlertSummaryResponse.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "No unrelated refactoring outside trend endpoint scope.",
+    "Daily buckets must be based on UTC calendar-day boundaries.",
+    "Response must include all days in range and all severities with zero values when no alerts exist.",
+    "Severity ordering must remain aligned with existing summary conventions (Low, Medium, High, Critical).",
+    "days query validation must use existing API validation style and return ValidationProblemDetails on 400."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertManagementServiceTests\" --collect:\"XPlat Code Coverage\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --collect:\"XPlat Code Coverage\""
+  ],
+  "coverage_goals": [
+    "Behavior coverage for endpoint/query validation defaults and range failures (400 ValidationProblemDetails).",
+    "Behavior coverage for service/repository trend aggregation by UTC day with oldest-first ordering.",
+    "Behavior coverage for zero-filled day and severity buckets and severity output ordering."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "PASS",
+      "findings": []
+    },
+    "l1": {
+      "status": "PASS",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}

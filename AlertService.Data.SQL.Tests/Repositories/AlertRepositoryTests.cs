@@ -312,6 +312,59 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetTrendsAsync_ReturnsOldestFirstWithZeroFilledDaysAndSeverityBreakdown()
+    {
+        var todayUtc = DateTime.UtcNow.Date;
+
+        await _repository.AddAsync(NewAlert("Oldest low", Severity.Low, todayUtc.AddDays(-2).AddHours(1)));
+        await _repository.AddAsync(NewAlert("Oldest critical", Severity.Critical, todayUtc.AddDays(-2).AddHours(5)));
+        await _repository.AddAsync(NewAlert("Today high", Severity.High, todayUtc.AddHours(2)));
+
+        var trends = await _repository.GetTrendsAsync(3);
+
+        Assert.Equal(3, trends.Count);
+
+        Assert.Equal(DateOnly.FromDateTime(todayUtc.AddDays(-2)), trends[0].DateUtc);
+        Assert.Equal(2, trends[0].TotalCount);
+        Assert.Equal(1, trends[0].LowCount);
+        Assert.Equal(0, trends[0].MediumCount);
+        Assert.Equal(0, trends[0].HighCount);
+        Assert.Equal(1, trends[0].CriticalCount);
+
+        Assert.Equal(DateOnly.FromDateTime(todayUtc.AddDays(-1)), trends[1].DateUtc);
+        Assert.Equal(0, trends[1].TotalCount);
+        Assert.Equal(0, trends[1].LowCount);
+        Assert.Equal(0, trends[1].MediumCount);
+        Assert.Equal(0, trends[1].HighCount);
+        Assert.Equal(0, trends[1].CriticalCount);
+
+        Assert.Equal(DateOnly.FromDateTime(todayUtc), trends[2].DateUtc);
+        Assert.Equal(1, trends[2].TotalCount);
+        Assert.Equal(0, trends[2].LowCount);
+        Assert.Equal(0, trends[2].MediumCount);
+        Assert.Equal(1, trends[2].HighCount);
+        Assert.Equal(0, trends[2].CriticalCount);
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_ExcludesAlertsOutsideRequestedWindow()
+    {
+        var todayUtc = DateTime.UtcNow.Date;
+
+        await _repository.AddAsync(NewAlert("Before window", Severity.Medium, todayUtc.AddDays(-3).AddHours(2)));
+        await _repository.AddAsync(NewAlert("Inside window", Severity.Medium, todayUtc.AddDays(-1).AddHours(2)));
+        await _repository.AddAsync(NewAlert("After window", Severity.Medium, todayUtc.AddDays(1).AddHours(2)));
+
+        var trends = await _repository.GetTrendsAsync(2);
+
+        Assert.Equal(2, trends.Count);
+        Assert.Equal(DateOnly.FromDateTime(todayUtc.AddDays(-1)), trends[0].DateUtc);
+        Assert.Equal(1, trends[0].TotalCount);
+        Assert.Equal(DateOnly.FromDateTime(todayUtc), trends[1].DateUtc);
+        Assert.Equal(0, trends[1].TotalCount);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));
@@ -329,6 +382,37 @@ public class AlertRepositoryTests : IDisposable
         var result = await _repository.GetByIdAsync(999);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetActiveDuplicateByTitleAndSeverityAsync_ReturnsNewestActiveMatchWithinWindow_CaseInsensitiveTitle()
+    {
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, new DateTime(2026, 1, 1, 8, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("MEMORY LEAK", Severity.High, new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("memory leak", Severity.High, new DateTime(2026, 1, 1, 6, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        var duplicate = await _repository.GetActiveDuplicateByTitleAndSeverityAsync(
+            title: "MeMoRy LeAk",
+            severity: Severity.High,
+            createdAfterUtc: new DateTime(2026, 1, 1, 7, 0, 0, DateTimeKind.Utc));
+
+        Assert.NotNull(duplicate);
+        Assert.Equal(new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc), duplicate!.CreatedDate);
+    }
+
+    [Fact]
+    public async Task GetActiveDuplicateByTitleAndSeverityAsync_IgnoresInactiveDifferentSeverityAndOutsideWindow()
+    {
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.Medium, new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc), isActive: true));
+        await _repository.AddAsync(NewAlert("Memory leak", Severity.High, new DateTime(2026, 1, 1, 6, 59, 59, DateTimeKind.Utc), isActive: true));
+
+        var duplicate = await _repository.GetActiveDuplicateByTitleAndSeverityAsync(
+            title: "memory leak",
+            severity: Severity.High,
+            createdAfterUtc: new DateTime(2026, 1, 1, 7, 0, 0, DateTimeKind.Utc));
+
+        Assert.Null(duplicate);
     }
 
     [Fact]
@@ -354,5 +438,88 @@ public class AlertRepositoryTests : IDisposable
         await _repository.DeleteAsync(added);
 
         Assert.False(await _context.Alerts.AnyAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_AddsDistinctCaseInsensitiveTags_AndReturnsUpdatedAlert()
+    {
+        var alert = await _repository.AddAsync(NewAlert("Tagged alert"));
+
+        var updated = await _repository.AddTagsAsync(alert.Id, new[] { "ops", "OPS", " prod " });
+
+        Assert.NotNull(updated);
+        Assert.Equal(2, updated!.AlertTags.Count);
+        Assert.Equal(new[] { "ops", "prod" }, updated.AlertTags.Select(current => current.Tag.Name).OrderBy(name => name).ToArray());
+        Assert.Equal(2, await _context.Tags.CountAsync());
+        Assert.Equal(2, await _context.AlertTags.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_ReusesExistingTagEntitiesAcrossAlerts()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+
+        await _repository.AddTagsAsync(first.Id, new[] { "ops" });
+        await _repository.AddTagsAsync(second.Id, new[] { "OPS" });
+
+        Assert.Equal(1, await _context.Tags.CountAsync());
+        Assert.Equal(2, await _context.AlertTags.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAssigned_RemovesAssignmentAndReturnsTrue()
+    {
+        var alert = await _repository.AddAsync(NewAlert("Tagged alert"));
+        await _repository.AddTagsAsync(alert.Id, new[] { "ops", "prod" });
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, " OPS ");
+
+        Assert.True(removed);
+        var refreshed = await _repository.GetByIdAsync(alert.Id);
+        Assert.NotNull(refreshed);
+        Assert.Single(refreshed!.AlertTags);
+        Assert.Equal("prod", refreshed.AlertTags.Single().Tag.Name);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenNotAssigned_ReturnsFalse()
+    {
+        var alert = await _repository.AddAsync(NewAlert("Tagged alert"));
+        await _repository.AddTagsAsync(alert.Id, new[] { "ops" });
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, "missing");
+
+        Assert.False(removed);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_ComposesWithExistingFilters()
+    {
+        var one = await _repository.AddAsync(NewAlert("Disk ops active", Severity.Critical, new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var two = await _repository.AddAsync(NewAlert("Disk ops inactive", Severity.Critical, new DateTime(2026, 2, 11, 0, 0, 0, DateTimeKind.Utc), isActive: false));
+        var three = await _repository.AddAsync(NewAlert("Disk prod active", Severity.Critical, new DateTime(2026, 2, 12, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var four = await _repository.AddAsync(NewAlert("CPU ops active", Severity.Critical, new DateTime(2026, 2, 13, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+
+        await _repository.AddTagsAsync(one.Id, new[] { "ops" });
+        await _repository.AddTagsAsync(two.Id, new[] { "ops" });
+        await _repository.AddTagsAsync(three.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(four.Id, new[] { "ops" });
+
+        var result = await _repository.GetAllAsync(
+            isActive: true,
+            severity: Severity.Critical,
+            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            createdTo: new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
+            search: "disk",
+            sortBy: "createdDate",
+            sortDirection: "desc",
+            page: 1,
+            pageSize: 20,
+            tag: " OPS ");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Disk ops active", result.Items[0].Title);
     }
 }

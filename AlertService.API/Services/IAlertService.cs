@@ -14,6 +14,8 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AlertTrendResponse>> GetTrendsAsync(int days, CancellationToken cancellationToken = default);
+
     Task<AlertResponse> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 
     /// <returns>The updated alert, or <c>null</c> if no alert with the given id exists.</returns>
@@ -24,4 +26,8 @@ public interface IAlertService
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<(AlertResponse? Alert, string? ValidationError)> AddTagsAsync(int id, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 }

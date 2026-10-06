@@ -50,3 +50,66 @@ GO
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261005180717_AddAlertTags'
+)
+BEGIN
+    CREATE TABLE [Tags] (
+        [Id] int NOT NULL IDENTITY,
+        [Name] nvarchar(30) NOT NULL,
+        [NormalizedName] nvarchar(30) NOT NULL,
+        CONSTRAINT [PK_Tags] PRIMARY KEY ([Id])
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261005180717_AddAlertTags'
+)
+BEGIN
+    CREATE TABLE [AlertTags] (
+        [AlertId] int NOT NULL,
+        [TagId] int NOT NULL,
+        CONSTRAINT [PK_AlertTags] PRIMARY KEY ([AlertId], [TagId]),
+        CONSTRAINT [FK_AlertTags_Alerts_AlertId] FOREIGN KEY ([AlertId]) REFERENCES [Alerts] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_AlertTags_Tags_TagId] FOREIGN KEY ([TagId]) REFERENCES [Tags] ([Id]) ON DELETE CASCADE
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261005180717_AddAlertTags'
+)
+BEGIN
+    CREATE INDEX [IX_AlertTags_TagId] ON [AlertTags] ([TagId]);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261005180717_AddAlertTags'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Tags_NormalizedName] ON [Tags] ([NormalizedName]);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261005180717_AddAlertTags'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261005180717_AddAlertTags', N'8.0.31');
+END;
+GO
+
+COMMIT;
+GO
+
