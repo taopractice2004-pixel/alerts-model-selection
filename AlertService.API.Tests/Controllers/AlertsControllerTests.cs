@@ -213,6 +213,63 @@ public class AlertsControllerTests
     }
 
     [Fact]
+    public async Task GetTrends_ReturnsOkWithBuckets()
+    {
+        var request = new AlertTrendsQueryRequest { Days = 2 };
+        IReadOnlyList<AlertTrendBucketResponse> buckets = new List<AlertTrendBucketResponse>
+        {
+            new() { Date = new DateOnly(2026, 8, 31), TotalCount = 0 },
+            new() { Date = new DateOnly(2026, 9, 1), TotalCount = 3, SeverityCounts = new AlertSeverityCountsResponse { High = 3 } }
+        };
+        _service.Setup(s => s.GetTrendsAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(buckets);
+
+        var result = await _controller.GetTrends(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsAssignableFrom<IReadOnlyList<AlertTrendBucketResponse>>(ok.Value);
+        Assert.Equal(2, body.Count);
+        Assert.Equal(3, body[1].SeverityCounts.High);
+    }
+
+    [Fact]
+    public void AlertTrendsQueryRequest_DefaultsToSevenDays_AndIsValid()
+    {
+        var request = new AlertTrendsQueryRequest();
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.Equal(7, request.Days);
+        Assert.True(isValid);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(90)]
+    public void AlertTrendsQueryRequest_WithBoundaryDays_PassesValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), new List<ValidationResult>(), validateAllProperties: true);
+
+        Assert.True(isValid);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(91)]
+    public void AlertTrendsQueryRequest_WithOutOfRangeDays_FailsValidation(int days)
+    {
+        var request = new AlertTrendsQueryRequest { Days = days };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertTrendsQueryRequest.Days)));
+    }
+
+    [Fact]
     public async Task Create_ReturnsCreatedAtRoute_WithLocationId()
     {
         var request = new CreateAlertRequest { Title = "Disk usage high", Severity = Severity.High };

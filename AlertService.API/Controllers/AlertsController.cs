@@ -48,6 +48,16 @@ public class AlertsController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>Gets per-day alert creation counts (total and by severity) for the last N UTC days, oldest first.</summary>
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(IReadOnlyList<AlertTrendBucketResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IReadOnlyList<AlertTrendBucketResponse>>> GetTrends([FromQuery] AlertTrendsQueryRequest request, CancellationToken cancellationToken)
+    {
+        var trends = await _alertService.GetTrendsAsync(request, cancellationToken);
+        return Ok(trends);
+    }
+
     /// <summary>Creates a new alert.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status201Created)]

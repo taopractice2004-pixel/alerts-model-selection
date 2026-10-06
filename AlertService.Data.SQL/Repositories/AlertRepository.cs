@@ -96,6 +96,20 @@ public class AlertRepository : IAlertRepository
             : (summary.TotalCount, summary.ActiveCount, summary.InactiveCount, summary.LowCount, summary.MediumCount, summary.HighCount, summary.CriticalCount);
     }
 
+    public async Task<IReadOnlyList<(DateTime Date, Severity Severity, int Count)>> GetCreatedCountsByDayAsync(
+        DateTime createdFromUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = await _context.Alerts
+            .AsNoTracking()
+            .Where(a => a.CreatedDate >= createdFromUtc)
+            .GroupBy(a => new { a.CreatedDate.Date, a.Severity })
+            .Select(g => new { g.Key.Date, g.Key.Severity, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return groups.Select(g => (g.Date, g.Severity, g.Count)).ToList();
+    }
+
     private static IQueryable<Alert> ApplySorting(IQueryable<Alert> query, string sortBy, string sortDirection)
     {
         var normalizedSortBy = sortBy.Trim();

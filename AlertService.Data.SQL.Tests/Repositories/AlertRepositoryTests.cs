@@ -313,6 +313,44 @@ public class AlertRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetCreatedCountsByDayAsync_GroupsByUtcDayAndSeverity_IncludingInactive()
+    {
+        await _repository.AddAsync(NewAlert("A", Severity.High, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("B", Severity.High, new DateTime(2026, 9, 1, 23, 59, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddAsync(NewAlert("C", Severity.Low, new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("D", Severity.High, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetCreatedCountsByDayAsync(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(2, result.Single(r => r.Date == new DateTime(2026, 9, 1) && r.Severity == Severity.High).Count);
+        Assert.Equal(1, result.Single(r => r.Date == new DateTime(2026, 9, 1) && r.Severity == Severity.Low).Count);
+        Assert.Equal(1, result.Single(r => r.Date == new DateTime(2026, 9, 2) && r.Severity == Severity.High).Count);
+    }
+
+    [Fact]
+    public async Task GetCreatedCountsByDayAsync_ExcludesAlertsBeforeWindowStart_AndIncludesExactStart()
+    {
+        await _repository.AddAsync(NewAlert("Before", Severity.Medium, new DateTime(2026, 8, 31, 23, 59, 59, DateTimeKind.Utc)));
+        await _repository.AddAsync(NewAlert("AtStart", Severity.Medium, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+        var result = await _repository.GetCreatedCountsByDayAsync(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var only = Assert.Single(result);
+        Assert.Equal(new DateTime(2026, 9, 1), only.Date);
+        Assert.Equal(Severity.Medium, only.Severity);
+        Assert.Equal(1, only.Count);
+    }
+
+    [Fact]
+    public async Task GetCreatedCountsByDayAsync_WhenNoAlerts_ReturnsEmpty()
+    {
+        var result = await _repository.GetCreatedCountsByDayAsync(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_WhenExists_ReturnsAlert()
     {
         var added = await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical));

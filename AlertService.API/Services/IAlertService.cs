@@ -14,6 +14,9 @@ public interface IAlertService
 
     Task<AlertSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken = default);
 
+    /// <returns>One zero-filled bucket per UTC day for the last <c>request.Days</c> days (including today), oldest first.</returns>
+    Task<IReadOnlyList<AlertTrendBucketResponse>> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default);
+
     /// <returns>The created alert, or the existing active duplicate (flagged) when one was created within the suppression window.</returns>
     Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default);
 

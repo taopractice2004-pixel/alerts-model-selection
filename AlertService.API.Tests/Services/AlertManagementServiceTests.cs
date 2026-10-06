@@ -134,6 +134,86 @@ public class AlertManagementServiceTests
         _repository.Verify(r => r.GetSummaryAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    private void SetupTrendCounts(params (DateTime Date, Severity Severity, int Count)[] counts) =>
+        _repository.Setup(r => r.GetCreatedCountsByDayAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(counts.ToList());
+
+    [Fact]
+    public async Task GetTrendsAsync_WithDefaultDays_ReturnsSevenBucketsEndingToday_OldestFirst()
+    {
+        SetupTrendCounts();
+
+        var result = await _service.GetTrendsAsync(new AlertTrendsQueryRequest());
+
+        Assert.Equal(7, result.Count);
+        Assert.Equal(new DateOnly(2026, 8, 26), result[0].Date);
+        Assert.Equal(new DateOnly(2026, 9, 1), result[^1].Date);
+        Assert.Equal(result.Select(b => b.Date).OrderBy(d => d), result.Select(b => b.Date));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(30)]
+    [InlineData(90)]
+    public async Task GetTrendsAsync_WithDays_ReturnsExactlyThatManyConsecutiveBuckets(int days)
+    {
+        SetupTrendCounts();
+
+        var result = await _service.GetTrendsAsync(new AlertTrendsQueryRequest { Days = days });
+
+        Assert.Equal(days, result.Count);
+        Assert.Equal(DateOnly.FromDateTime(FixedNow.UtcDateTime), result[^1].Date);
+        for (var i = 1; i < result.Count; i++)
+        {
+            Assert.Equal(result[i - 1].Date.AddDays(1), result[i].Date);
+        }
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_QueriesRepositoryFromStartOfWindowInUtc()
+    {
+        SetupTrendCounts();
+
+        _ = await _service.GetTrendsAsync(new AlertTrendsQueryRequest { Days = 3 });
+
+        _repository.Verify(r => r.GetCreatedCountsByDayAsync(
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_ZeroFillsEmptyDaysAndSeverities_AndTotalsMatchSeverityCounts()
+    {
+        SetupTrendCounts(
+            (new DateTime(2026, 8, 31), Severity.High, 2),
+            (new DateTime(2026, 8, 31), Severity.Low, 1),
+            (new DateTime(2026, 9, 1), Severity.Critical, 4));
+
+        var result = await _service.GetTrendsAsync(new AlertTrendsQueryRequest { Days = 3 });
+
+        Assert.Equal(3, result.Count);
+
+        Assert.Equal(new DateOnly(2026, 8, 30), result[0].Date);
+        Assert.Equal(0, result[0].TotalCount);
+        Assert.Equal(0, result[0].SeverityCounts.Low + result[0].SeverityCounts.Medium + result[0].SeverityCounts.High + result[0].SeverityCounts.Critical);
+
+        Assert.Equal(3, result[1].TotalCount);
+        Assert.Equal(1, result[1].SeverityCounts.Low);
+        Assert.Equal(0, result[1].SeverityCounts.Medium);
+        Assert.Equal(2, result[1].SeverityCounts.High);
+        Assert.Equal(0, result[1].SeverityCounts.Critical);
+
+        Assert.Equal(4, result[2].TotalCount);
+        Assert.Equal(4, result[2].SeverityCounts.Critical);
+        Assert.Equal(0, result[2].SeverityCounts.Low);
+    }
+
+    [Fact]
+    public async Task GetTrendsAsync_WithNullRequest_Throws()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _service.GetTrendsAsync(null!));
+    }
+
     [Fact]
     public async Task CreateAsync_SetsCreatedDate_TrimsInput_AndSaves()
     {

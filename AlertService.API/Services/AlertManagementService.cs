@@ -1,6 +1,7 @@
 using AlertService.API.Configuration;
 using AlertService.API.Mappings;
 using AlertService.Common.Constants;
+using AlertService.Common.Enums;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -85,6 +86,39 @@ public class AlertManagementService : IAlertService
                 Critical = summary.CriticalCount
             }
         };
+    }
+
+    public async Task<IReadOnlyList<AlertTrendBucketResponse>> GetTrendsAsync(AlertTrendsQueryRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var today = _timeProvider.GetUtcNow().UtcDateTime.Date;
+        var startDate = today.AddDays(-(request.Days - 1));
+
+        var counts = await _repository.GetCreatedCountsByDayAsync(startDate, cancellationToken);
+        var countsByDay = counts.ToLookup(c => c.Date.Date);
+
+        var buckets = new List<AlertTrendBucketResponse>(request.Days);
+        for (var day = startDate; day <= today; day = day.AddDays(1))
+        {
+            var dayCounts = countsByDay[day].ToList();
+            var severityCounts = new AlertSeverityCountsResponse
+            {
+                Low = dayCounts.Where(c => c.Severity == Severity.Low).Sum(c => c.Count),
+                Medium = dayCounts.Where(c => c.Severity == Severity.Medium).Sum(c => c.Count),
+                High = dayCounts.Where(c => c.Severity == Severity.High).Sum(c => c.Count),
+                Critical = dayCounts.Where(c => c.Severity == Severity.Critical).Sum(c => c.Count)
+            };
+
+            buckets.Add(new AlertTrendBucketResponse
+            {
+                Date = DateOnly.FromDateTime(day),
+                TotalCount = severityCounts.Low + severityCounts.Medium + severityCounts.High + severityCounts.Critical,
+                SeverityCounts = severityCounts
+            });
+        }
+
+        return buckets;
     }
 
     public async Task<CreateAlertResult> CreateAsync(CreateAlertRequest request, CancellationToken cancellationToken = default)

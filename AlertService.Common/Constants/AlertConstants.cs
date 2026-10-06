@@ -20,4 +20,7 @@ public static class AlertConstants
     public const int TagMaxLength = 30;
     public const int MaxTagsPerAlert = 10;
     public const int MaxTagsPerRequest = 100;
+    public const int MinTrendDays = 1;
+    public const int DefaultTrendDays = 7;
+    public const int MaxTrendDays = 90;
 }
