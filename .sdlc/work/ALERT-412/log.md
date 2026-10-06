@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR
+L1_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -16,8 +16,8 @@ PREPARE_PR
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | STAGE_PASSED |
 
 ## Entries
 
@@ -73,3 +73,29 @@ PREPARE_PR
 - Loop: 0/3
 - Standards notes: None
 - Next recommended command: /l0-review ALERT-412
+
+### 2026-10-06 — /l0-review ALERT-412 — STAGE_PASSED
+- Summary: Reviewed the scoped ALERT-412 controller, service, repository, DTO, and test changes against the selected compact standards and recorded no code-level findings requiring changes.
+- Files changed: `.sdlc/work/ALERT-412/work.json`, `.sdlc/work/ALERT-412/log.md`
+- Build: Reused previously recorded result — NOT_RUN in this stage
+- Unit tests: Reused previously recorded results — NOT_RUN in this stage
+- Acceptance criteria: Reused previously recorded results
+- Coverage: Reused previously recorded results
+- Bugs: None
+- Review: L0 PASS — no findings
+- Loop: 0/3
+- Standards notes: Reviewed against `coding`, `backend-dotnet`, `api-rest`, `database`, and `service-architecture`
+- Next recommended command: /l1-review ALERT-412
+
+### 2026-10-06 — /l1-review ALERT-412 — STAGE_PASSED
+- Summary: Reviewed the ALERT-412 trends endpoint against the approved plan, existing layering, API contract conventions, data-access design, and the targeted test strategy; no engineering or design findings require changes.
+- Files changed: `.sdlc/work/ALERT-412/work.json`, `.sdlc/work/ALERT-412/log.md`
+- Build: Reused previously recorded result — NOT_RUN in this stage
+- Unit tests: Reused previously recorded results — NOT_RUN in this stage
+- Acceptance criteria: Reused previously recorded results
+- Coverage: Reused previously recorded results
+- Bugs: None
+- Review: L1 PASS — no findings
+- Loop: 0/3
+- Standards notes: Reviewed against the approved plan plus `coding`, `backend-dotnet`, `api-rest`, `database`, and `service-architecture`
+- Next recommended command: None — review complete
