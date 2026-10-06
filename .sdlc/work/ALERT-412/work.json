@@ -1,0 +1,124 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-412",
+  "work_case": "SIMPLE",
+  "relationship_mode": "current_story",
+  "tracker": "ALERT",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add an alert-volume trends endpoint that returns daily UTC creation counts for the last N days, broken down by severity with zero-filled buckets.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "GET /api/alerts/trends?days=N returns one bucket per UTC calendar day for the last N days, oldest first, with each bucket including the total alert count and per-severity counts for Low, Medium, High, and Critical."
+    },
+    {
+      "id": "AC2",
+      "text": "The trends response includes zero-count days and zero-count severities inside returned buckets instead of omitting missing dates or missing severity values."
+    },
+    {
+      "id": "AC3",
+      "text": "The endpoint defaults days to 7 and only accepts values from 1 through 90 inclusive."
+    },
+    {
+      "id": "AC4",
+      "text": "Invalid days values, including out-of-range and non-numeric query input, return 400 with ValidationProblemDetails consistent with the API's existing query-validation behavior."
+    },
+    {
+      "id": "AC5",
+      "text": "Per-severity counts in the trends contract follow the same Low, Medium, High, Critical ordering convention already used by the summary endpoint."
+    }
+  ],
+  "scope_anchors": [
+    "GET /api/alerts/trends?days=N",
+    "AlertService.API/Controllers/AlertsController.cs -> new trends endpoint",
+    "AlertService.API/Services/IAlertService.cs and AlertService.API/Services/AlertManagementService.cs -> trends query seam",
+    "AlertService.Data/Interfaces/IAlertRepository.cs and AlertService.Data.SQL/Repositories/AlertRepository.cs -> daily aggregation seam",
+    "AlertService.DTO/Requests/AlertQueryRequest.cs and AlertService.DTO/Responses/AlertSummaryResponse.cs -> existing validation and severity-shape conventions"
+  ],
+  "exact_source_files": [
+    "AlertService.Common/Constants/AlertConstants.cs",
+    "AlertService.API/Controllers/AlertsController.cs",
+    "AlertService.API/Services/IAlertService.cs",
+    "AlertService.API/Services/AlertManagementService.cs",
+    "AlertService.Data/Interfaces/IAlertRepository.cs",
+    "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+    "AlertService.DTO/Requests/AlertTrendQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertTrendBucketResponse.cs"
+  ],
+  "exact_test_files": [
+    "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+    "AlertService.API.Tests/AlertTrendsEndpointTests.cs",
+    "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+    "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs"
+  ],
+  "adjacent_dependencies": [
+    "AlertService.DTO/Requests/AlertQueryRequest.cs",
+    "AlertService.DTO/Responses/AlertSummaryResponse.cs",
+    "AlertService.DTO/Responses/AlertSeverityCountsResponse.cs",
+    "AlertService.Common/Enums/Severity.cs",
+    "AlertService.API.Tests/TestInfrastructure/HealthChecksWebApplicationFactory.cs"
+  ],
+  "selected_standards": [
+    "coding",
+    "backend-dotnet",
+    "api-rest",
+    "database",
+    "service-architecture"
+  ],
+  "constraints": [
+    "Keep the existing controller -> service -> repository layering intact; the controller should delegate the trends query rather than assembling buckets or severity counts itself.",
+    "Compute the date window in UTC calendar days and return exactly N buckets in chronological order, including days with no alerts.",
+    "Preserve the existing Low, Medium, High, Critical severity ordering convention already exposed by the summary DTOs rather than returning an unordered map or enum-keyed dictionary.",
+    "Use the API's existing model-binding and validation pattern so invalid query input surfaces as ValidationProblemDetails 400 responses without introducing custom error formats.",
+    "Treat this as a read-only reporting feature over existing alert CreatedDate and Severity data; no schema or migration work is required unless implementation uncovers a hidden repository limitation."
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertTrendsEndpointTests|FullyQualifiedName~AlertManagementServiceTests\"",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj --filter \"FullyQualifiedName~AlertRepositoryTests\""
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj --filter \"FullyQualifiedName~AlertsControllerTests|FullyQualifiedName~AlertTrendsEndpointTests|FullyQualifiedName~AlertManagementServiceTests\" --collect:\"XPlat Code Coverage\"",
+    "NOT_CONFIGURED: AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj does not reference a supported XPlat code coverage collector"
+  ],
+  "coverage_goals": [
+    "Behavior coverage for the happy-path trends response, including the default 7-day window and chronological bucket ordering.",
+    "Behavior coverage for zero-filled days and per-severity counts so missing data does not remove dates or severity slots from the response contract.",
+    "Behavior coverage for repository aggregation across UTC day boundaries and severity breakdown mapping into the response DTO shape.",
+    "Behavior coverage for invalid query input, including out-of-range and non-numeric days values returning ValidationProblemDetails 400 responses."
+  ],
+  "test_file_strategy": "edit_existing_unit_test_file_or_create_new_one",
+  "desired_test_layer": "unit",
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "pr": {
+    "prepared": true,
+    "status": "PREPARED",
+    "human_created": false,
+    "url": ""
+  },
+  "review": {
+    "cycle": 0,
+    "max_review_cycles": 3,
+    "origin": "",
+    "return_after_testing": false,
+    "l0": {
+      "status": "NOT_STARTED",
+      "findings": []
+    },
+    "l1": {
+      "status": "NOT_STARTED",
+      "findings": []
+    }
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": []
+}
