@@ -6,7 +6,7 @@
 > actually happened here.
 
 ## Current Stage
-PREPARE_PR (awaiting human PR creation)
+L1_REVIEW
 
 | Stage | Status |
 |---|---|
@@ -16,8 +16,8 @@ PREPARE_PR (awaiting human PR creation)
 | Bug Fix | NOT_STARTED |
 | Test → Fix Loop | 0/3 — TESTS_PASSED |
 | Prepare PR | WAITING_FOR_HUMAN |
-| L0 Review | NOT_STARTED |
-| L1 Review | NOT_STARTED |
+| L0 Review | STAGE_PASSED |
+| L1 Review | STAGE_PASSED |
 
 ## Entries
 
@@ -112,3 +112,53 @@ PREPARE_PR (awaiting human PR creation)
 - Coverage: NOT_CONFIGURED.
 - Human action required: review pr.md, then manually create the PR (AI does not touch Git).
 - Next recommended command: /l0-review ALERT-411 — after the developer confirms the PR exists.
+
+### 2026-10-06 — /l0-review — STAGE_PASSED
+- Summary: Read-only code-level review of the ALERT-411 suppression changes (9 production +
+  3 test files). Reviewed scope discipline, backend-dotnet/coding standards, code quality,
+  security, and static results against the changed files only.
+- Scope (A): All changes match work.json scope; new `AlertSuppressionOptions` (Configuration/)
+  and `CreateAlertResult`/`CreateAlertStatus` (DTO/Responses/) placed as planned; no unrelated
+  refactoring or protected/generated-file changes.
+- Standards (B): Sealed option/result types, `const SectionName`, `init` properties, structured
+  logging, cutoff computed from injected `TimeProvider` (no `DateTime.UtcNow`) — consistent with
+  repository conventions.
+- Code quality (C): No dead code; `FindRecentDuplicateAsync` case-insensitive `.ToLower()` match
+  mirrors the existing `GetAllAsync` search pattern; clean null/control flow and logging.
+- Security (D): No secrets introduced; EF Core parameterizes the duplicate lookup; no sensitive
+  data logged (title is user free-text, consistent with existing create logging).
+- Static (E): Build/tests reused from /unit-testing (API 66/66, Data.SQL 41/41); not re-run.
+- Findings: None requiring code changes.
+- Result: L0 PASS (review.l0.status = PASS, 0 findings). review.cycle unchanged (0).
+- Next recommended command: /l1-review ALERT-411
+
+### 2026-10-06 — /l1-review — STAGE_PASSED
+- Summary: Read-only engineering/design review of the ALERT-411 suppression change against the
+  approved plan and existing architecture. Reviewed requirement correctness, layer placement,
+  design/maintainability, API/data/config design, and test-strategy quality — not L0 code-level
+  items.
+- Requirement implementation (A): Implementation matches plan.md and AC1–AC6 semantically —
+  suppression requires existing active + same Severity + case-insensitive/trimmed Title +
+  CreatedDate within window; Suppressed → 200 + header, Created → 201; window bound from config;
+  different severity / inactive prior not suppressed; most-recent tie-break; window <= 0 disables.
+- Architecture (B): Correct responsibility split — repository owns the duplicate query, service
+  computes the cutoff from injected TimeProvider + options and orchestrates Created/Suppressed
+  (no HttpContext), controller owns the 200-vs-201 + header mapping. Result-object pattern
+  mirrors existing AddTagsResult; dependency direction intact.
+- Design & maintainability (C): Sealed AlertSuppressionOptions (const SectionName) and
+  CreateAlertResult (init-only); header name as a const; reuses ToResponse/ToEntity; no
+  over-engineering. Read-before-insert is a deliberate, plan-scoped best-effort dedup (no schema
+  change); residual concurrency race is an accepted limitation, not a blocking design defect.
+- API / Data / Config (D): POST contract documents both 201 and 200 via ProducesResponseType;
+  new AlertSuppression config section; no migration. FindRecentDuplicateAsync query style
+  (AsNoTracking, ToLower()) mirrors existing GetAllAsync; SQL collation remains a known risk
+  (already recorded), not a new L1 finding.
+- Testing strategy (E): Meaningful behavior coverage — repository boundary (exactly-at-cutoff
+  vs older), tie-break most-recent, trim/case-insensitive, severity mismatch, inactive, no-title;
+  service suppress/skip-AddAsync, create, title+severity forwarding, configured-window cutoff,
+  window-disabled; controller 201 vs 200 + header. Tests assert behavior, not mere green.
+- Findings: None requiring changes.
+- Build / tests: NOT_RE_RUN — reused /unit-testing results (API 66/66, Data.SQL 41/41; AC1–AC6 MET).
+- Result: L1 PASS (review.l1.status = PASS, 0 findings). review.cycle unchanged (0);
+  review.return_after_testing = false. L0 + L1 passed — AI review complete.
+- Next recommended command: None — review complete.
