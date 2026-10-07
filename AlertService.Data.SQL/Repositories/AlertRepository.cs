@@ -16,54 +16,60 @@ public class AlertRepository : IAlertRepository
     }
 
     public async Task<(IReadOnlyList<Alert> Items, int TotalCount)> GetAllAsync(
-        bool? isActive = null,
-        Severity? severity = null,
-        DateTime? createdFrom = null,
-        DateTime? createdTo = null,
-        string? search = null,
-        string sortBy = AlertConstants.SortByCreatedDate,
-        string sortDirection = AlertConstants.SortDirectionDesc,
-        int page = AlertConstants.DefaultPageNumber,
-        int pageSize = AlertConstants.DefaultPageSize,
+        AlertQueryOptions options,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<Alert> query = _context.Alerts.AsNoTracking();
+        ArgumentNullException.ThrowIfNull(options);
 
-        if (isActive.HasValue)
-        {
-            query = query.Where(a => a.IsActive == isActive.Value);
-        }
-
-        if (severity.HasValue)
-        {
-            query = query.Where(a => a.Severity == severity.Value);
-        }
-
-        if (createdFrom.HasValue)
-        {
-            query = query.Where(a => a.CreatedDate >= createdFrom.Value);
-        }
-
-        if (createdTo.HasValue)
-        {
-            query = query.Where(a => a.CreatedDate <= createdTo.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var normalizedSearch = search.Trim().ToLower();
-            query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
-        }
+        var query = ApplyFilters(_context.Alerts.AsNoTracking(), options);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        query = ApplySorting(query, sortBy, sortDirection);
+        query = ApplySorting(query, options.SortBy, options.SortDirection);
 
         var items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Include(a => a.Tags)
+            .Skip((options.Page - 1) * options.PageSize)
+            .Take(options.PageSize)
             .ToListAsync(cancellationToken);
 
         return (items, totalCount);
+    }
+
+    private static IQueryable<Alert> ApplyFilters(IQueryable<Alert> query, AlertQueryOptions options)
+    {
+        if (options.IsActive.HasValue)
+        {
+            query = query.Where(a => a.IsActive == options.IsActive.Value);
+        }
+
+        if (options.Severity.HasValue)
+        {
+            query = query.Where(a => a.Severity == options.Severity.Value);
+        }
+
+        if (options.CreatedFrom.HasValue)
+        {
+            query = query.Where(a => a.CreatedDate >= options.CreatedFrom.Value);
+        }
+
+        if (options.CreatedTo.HasValue)
+        {
+            query = query.Where(a => a.CreatedDate <= options.CreatedTo.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Search))
+        {
+            var normalizedSearch = options.Search.Trim().ToLower();
+            query = query.Where(a => a.Title.ToLower().Contains(normalizedSearch));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Tag))
+        {
+            var normalizedTag = Tag.NormalizeName(options.Tag);
+            query = query.Where(a => a.Tags.Any(t => t.Name == normalizedTag));
+        }
+
+        return query;
     }
 
     public async Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
@@ -124,7 +130,9 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -144,5 +152,39 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
+    {
+        var normalizedNames = tagNames.Select(Tag.NormalizeName).Distinct().ToList();
+
+        var existingTags = await _context.Tags
+            .Where(t => normalizedNames.Contains(t.Name))
+            .ToListAsync(cancellationToken);
+
+        foreach (var name in normalizedNames)
+        {
+            var tag = existingTags.FirstOrDefault(t => t.Name == name) ?? new Tag { Name = name };
+            if (!alert.Tags.Contains(tag))
+            {
+                alert.Tags.Add(tag);
+            }
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(Alert alert, string tagName, CancellationToken cancellationToken = default)
+    {
+        var normalizedName = Tag.NormalizeName(tagName);
+        var tag = alert.Tags.FirstOrDefault(t => t.Name == normalizedName);
+        if (tag is null)
+        {
+            return false;
+        }
+
+        alert.Tags.Remove(tag);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

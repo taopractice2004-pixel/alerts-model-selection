@@ -4,7 +4,10 @@ using AlertService.API.Services;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moq;
 
 namespace AlertService.API.Tests.Controllers;
@@ -16,7 +19,19 @@ public class AlertsControllerTests
 
     public AlertsControllerTests()
     {
-        _controller = new AlertsController(_service.Object);
+        _controller = new AlertsController(_service.Object)
+        {
+            ProblemDetailsFactory = new StubProblemDetailsFactory()
+        };
+    }
+
+    private sealed class StubProblemDetailsFactory : ProblemDetailsFactory
+    {
+        public override ProblemDetails CreateProblemDetails(HttpContext httpContext, int? statusCode = null, string? title = null, string? type = null, string? detail = null, string? instance = null) =>
+            new() { Status = statusCode ?? StatusCodes.Status500InternalServerError };
+
+        public override ValidationProblemDetails CreateValidationProblemDetails(HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null, string? title = null, string? type = null, string? detail = null, string? instance = null) =>
+            new(modelStateDictionary) { Status = statusCode ?? StatusCodes.Status400BadRequest };
     }
 
     private static PagedResponse<AlertResponse> SamplePagedResponse(params AlertResponse[] items) => new()
@@ -282,5 +297,140 @@ public class AlertsControllerTests
         var result = await _controller.Delete(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    private static AddAlertTagsRequest TagsRequest(params string[] tags) => new() { Tags = tags.ToList() };
+
+    private static List<ValidationResult> Validate(object request)
+    {
+        var results = new List<ValidationResult>();
+        Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+        return results;
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSuccessful_ReturnsCreatedWithUpdatedAlert()
+    {
+        var request = TagsRequest("disk");
+        var response = SampleResponse(3);
+        response.Tags = new List<string> { "disk" };
+        _service.Setup(s => s.AddTagsAsync(3, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddAlertTagsResult(response, false));
+
+        var result = await _controller.AddTags(3, request, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtRouteResult>(result.Result);
+        Assert.Equal(nameof(AlertsController.GetById), created.RouteName);
+        Assert.Equal(3, created.RouteValues!["id"]);
+        Assert.Equal(new[] { "disk" }, Assert.IsType<AlertResponse>(created.Value).Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertMissing_ReturnsNotFound()
+    {
+        var request = TagsRequest("disk");
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddAlertTagsResult(null, false));
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenTagLimitExceeded_ReturnsBadRequestValidationProblem()
+    {
+        var request = TagsRequest("disk");
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AddAlertTagsResult(null, true));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var problem = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var details = Assert.IsAssignableFrom<ValidationProblemDetails>(problem.Value);
+        Assert.Equal(StatusCodes.Status400BadRequest, details.Status);
+        Assert.Contains(nameof(AddAlertTagsRequest.Tags), details.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAssigned_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "disk", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "disk", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenAlertOrTagMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(99, "disk", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(99, "disk", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithBetweenOneAndTenTagsOfValidLength_PassesValidation()
+    {
+        var tags = Enumerable.Range(1, 10).Select(i => i == 1 ? new string('x', 30) : $"t{i}").ToArray();
+
+        Assert.Empty(Validate(TagsRequest(tags)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithNoTags_FailsValidation()
+    {
+        var results = Validate(TagsRequest());
+
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithMoreThanTenTags_FailsValidation()
+    {
+        var results = Validate(TagsRequest(Enumerable.Range(1, 11).Select(i => $"t{i}").ToArray()));
+
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public void AddAlertTagsRequest_WithEmptyOrWhitespaceTag_FailsValidation(string tag)
+    {
+        var results = Validate(TagsRequest("ok", tag));
+
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AddAlertTagsRequest_WithThirtyOneCharacterTag_FailsValidation()
+    {
+        var results = Validate(TagsRequest(new string('x', 31)));
+
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddAlertTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagLongerThanThirtyCharacters_FailsValidation()
+    {
+        var results = Validate(new AlertQueryRequest { Tag = new string('x', 31) });
+
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    [Fact]
+    public async Task GetAll_WithTagFilter_PassesTagToService()
+    {
+        var request = new AlertQueryRequest { Tag = "disk", IsActive = true };
+        _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse());
+
+        _ = await _controller.GetAll(request, CancellationToken.None);
+
+        _service.Verify(s => s.GetAllAsync(It.Is<AlertQueryRequest>(r => r.Tag == "disk" && r.IsActive == true), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

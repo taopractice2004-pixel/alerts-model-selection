@@ -24,4 +24,10 @@ public interface IAlertService
 
     /// <returns><c>true</c> if the alert was deleted, <c>false</c> if it was not found.</returns>
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <returns>The updated alert; a null alert means it was not found, and <c>TagLimitExceeded</c> means the 10-tag limit would be passed.</returns>
+    Task<AddAlertTagsResult> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns><c>true</c> if the tag was removed, <c>false</c> if the alert or the tag assignment was not found.</returns>
+    Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default);
 }

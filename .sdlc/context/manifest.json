@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "stage": "setup-repo-context",
+  "generatedAtUtc": "2026-10-08T00:00:00Z",
+  "repositoryMode": "EXISTING_PROJECT",
+  "contextFiles": [
+    "manifest.json",
+    "project-profile.md"
+  ],
+  "detected": {
+    "technologies": [
+      "C#",
+      ".NET 8 (net8.0)",
+      "ASP.NET Core Web API",
+      "Entity Framework Core 8 (SQL Server)",
+      "Serilog",
+      "Swashbuckle (Swagger)",
+      "xUnit",
+      "Moq",
+      "EF Core InMemory / SQLite (tests)",
+      "coverlet.collector",
+      "T-SQL"
+    ],
+    "sourceInputs": {
+      "requirementsDocs": [],
+      "rootDocs": [
+        "README.md"
+      ],
+      "buildFiles": [
+        "AlertService.sln",
+        "Directory.Build.props",
+        "dotnet-tools.json",
+        "AlertService.API/AlertService.API.csproj",
+        "AlertService.Data.SQL/AlertService.Data.SQL.csproj",
+        "AlertService.API.Tests/AlertService.API.Tests.csproj",
+        "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+      ],
+      "standards": [
+        "standards/coding-standards.md",
+        "standards/code-review-standards.md",
+        "standards/backend-dotnet-standards.md",
+        "standards/api-rest-standards.md",
+        "standards/database-standards.md",
+        "standards/service-architecture-standards.md"
+      ],
+      "sampleSource": [
+        "AlertService.API/Controllers/AlertsController.cs",
+        "AlertService.API/Services/AlertManagementService.cs",
+        "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+        "AlertService.API.Tests/Services/AlertManagementServiceTests.cs"
+      ]
+    }
+  },
+  "exclusions": {
+    "excludedPaths": [
+      "**/bin/",
+      "**/obj/",
+      ".vs/",
+      "**/Logs/",
+      "**/TestResults/"
+    ],
+    "excludedPatterns": [
+      "*.user"
+    ],
+    "reason": "Generated, dependency, build, cache, binary or runtime-noise content that should normally not be used as Copilot context.",
+    "notes": "Derived from .gitignore and the .NET solution layout. EF migration files under AlertService.Data.SQL/Migrations are source and are not excluded. Config files (*.json) are not excluded by extension."
+  },
+  "standards": {
+    "note": "Routing index only; no rule text. Compact rules auto-apply via the instruction files (applyTo). A stage reads a full source file only for an exact rule or missing detail, choosing the items whose applies_to matches the touched files. frontend-react and ui standards omitted: no React/JS/HTML/CSS in this repository.",
+    "items": [
+      {
+        "id": "coding",
+        "name": "Global Coding Standards",
+        "source_file": "standards/coding-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/coding.instructions.md",
+        "applies_to": "**/*.cs,**/*.ts,**/*.tsx,**/*.js,**/*.jsx,**/*.sql",
+        "scope": "global",
+        "priority": "global"
+      },
+      {
+        "id": "code-review",
+        "name": "Code Review Standards",
+        "source_file": "standards/code-review-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/code-review.instructions.md",
+        "applies_to": "**/*.cs,**/*.ts,**/*.tsx,**/*.js,**/*.jsx",
+        "scope": "global",
+        "priority": "global"
+      },
+      {
+        "id": "backend-dotnet",
+        "name": "Backend .NET Standards",
+        "source_file": "standards/backend-dotnet-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/backend-dotnet.instructions.md",
+        "applies_to": "**/*.cs,**/*.csproj",
+        "scope": "backend",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "api-rest",
+        "name": "REST API Standards",
+        "source_file": "standards/api-rest-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/api-rest.instructions.md",
+        "applies_to": "**/*Controller.cs,**/openapi*.yaml,**/openapi*.yml,**/swagger*.yaml,**/swagger*.yml,**/*.openapi.yaml,**/*.openapi.yml",
+        "scope": "api-contract",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "database",
+        "name": "Database Standards",
+        "source_file": "standards/database-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/database.instructions.md",
+        "applies_to": "**/*.sql,**/Migrations/**,**/*DbContext.cs,**/*Repository.cs",
+        "scope": "database",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "service-architecture",
+        "name": "Service Architecture Standards",
+        "source_file": "standards/service-architecture-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/service-architecture.instructions.md",
+        "applies_to": "**/*Service.cs,**/*Client.cs,**/Program.cs,**/Startup.cs",
+        "scope": "service-architecture",
+        "priority": "high-when-present"
+      }
+    ]
+  },
+  "notes": "Generated by /setup-repo-context 1. Run /refresh-repo-context when structure, standards, or build/test commands change."
+}

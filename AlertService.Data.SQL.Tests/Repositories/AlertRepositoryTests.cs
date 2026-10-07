@@ -1,4 +1,5 @@
 using AlertService.Common.Enums;
+using AlertService.Data.Interfaces;
 using AlertService.Data.SQL.Repositories;
 using AlertService.Models;
 using Microsoft.Data.Sqlite;
@@ -48,7 +49,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Older", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("Newer", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync();
+        var result = await _repository.GetAllAsync(new AlertQueryOptions());
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.Items.Count);
@@ -59,7 +60,7 @@ public class AlertRepositoryTests : IDisposable
     [Fact]
     public async Task GetAllAsync_WhenEmpty_ReturnsEmptyList()
     {
-        var result = await _repository.GetAllAsync();
+        var result = await _repository.GetAllAsync(new AlertQueryOptions());
 
         Assert.Equal(0, result.TotalCount);
         Assert.Empty(result.Items);
@@ -72,7 +73,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Inactive newest", created: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), isActive: false));
         await _repository.AddAsync(NewAlert("Active newest", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc), isActive: true));
 
-        var result = await _repository.GetAllAsync(true);
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { IsActive = true });
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.Items.Count);
@@ -88,7 +89,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Inactive older", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc), isActive: false));
         await _repository.AddAsync(NewAlert("Inactive newest", created: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), isActive: false));
 
-        var result = await _repository.GetAllAsync(false);
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { IsActive = false });
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.Items.Count);
@@ -109,7 +110,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("High alert", Severity.High, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("Critical alert", Severity.Critical, new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(severity: severity);
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { Severity = severity });
 
         Assert.Single(result.Items);
         Assert.Equal(1, result.TotalCount);
@@ -124,7 +125,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Critical inactive", Severity.Critical, new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc), isActive: false));
         await _repository.AddAsync(NewAlert("High active", Severity.High, new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), isActive: true));
 
-        var result = await _repository.GetAllAsync(isActive: true, severity: Severity.Critical);
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { IsActive = true, Severity = Severity.Critical });
 
         Assert.Single(result.Items);
         Assert.Equal(1, result.TotalCount);
@@ -140,7 +141,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("CPU spike", Severity.Critical, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("DISK controller warning", Severity.Medium, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(search: "disk");
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { Search = "disk" });
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.Items.Count);
@@ -155,7 +156,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("At boundary", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("After boundary", created: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { CreatedFrom = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc) });
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(new[] { "After boundary", "At boundary" }, result.Items.Select(a => a.Title).ToArray());
@@ -168,7 +169,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("At boundary", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("After boundary", created: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(createdTo: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { CreatedTo = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc) });
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(new[] { "At boundary", "Before boundary" }, result.Items.Select(a => a.Title).ToArray());
@@ -183,9 +184,11 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Range end", created: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("After range", created: new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(
-            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-            createdTo: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+        var result = await _repository.GetAllAsync(new AlertQueryOptions
+        {
+            CreatedFrom = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            CreatedTo = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
 
         Assert.Equal(3, result.TotalCount);
         Assert.Equal(new[] { "Range end", "In range", "Range start" }, result.Items.Select(a => a.Title).ToArray());
@@ -201,12 +204,14 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Disk in range", Severity.Critical, new DateTime(2026, 2, 25, 0, 0, 0, DateTimeKind.Utc), isActive: true));
         await _repository.AddAsync(NewAlert("Disk after range", Severity.Critical, new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc), isActive: true));
 
-        var result = await _repository.GetAllAsync(
-            isActive: true,
-            severity: Severity.Critical,
-            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-            createdTo: new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
-            search: "disk");
+        var result = await _repository.GetAllAsync(new AlertQueryOptions
+        {
+            IsActive = true,
+            Severity = Severity.Critical,
+            CreatedFrom = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            CreatedTo = new DateTime(2026, 2, 28, 23, 59, 59, DateTimeKind.Utc),
+            Search = "disk"
+        });
 
         Assert.Single(result.Items);
         Assert.Equal(1, result.TotalCount);
@@ -219,9 +224,11 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Older alert", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("Newer alert", created: new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(
-            createdFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-            createdTo: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+        var result = await _repository.GetAllAsync(new AlertQueryOptions
+        {
+            CreatedFrom = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            CreatedTo = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
 
         Assert.Equal(0, result.TotalCount);
         Assert.Empty(result.Items);
@@ -234,7 +241,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("Alpha", Severity.Low, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("Mike", Severity.Medium, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(sortBy: "title", sortDirection: "asc", page: 1, pageSize: 2);
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { SortBy = "title", SortDirection = "asc", Page = 1, PageSize = 2 });
 
         Assert.Equal(3, result.TotalCount);
         Assert.Equal(new[] { "Alpha", "Mike" }, result.Items.Select(a => a.Title).ToArray());
@@ -260,7 +267,7 @@ public class AlertRepositoryTests : IDisposable
         await repository.AddAsync(NewAlert("Low", Severity.Low, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
         await repository.AddAsync(NewAlert("High", Severity.High, new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await repository.GetAllAsync(sortBy: "severity", sortDirection: "desc");
+        var result = await repository.GetAllAsync(new AlertQueryOptions { SortBy = "severity", SortDirection = "desc" });
 
         Assert.Equal(new[] { Severity.Critical, Severity.High, Severity.Medium, Severity.Low }, result.Items.Select(a => a.Severity).ToArray());
     }
@@ -271,7 +278,7 @@ public class AlertRepositoryTests : IDisposable
         await _repository.AddAsync(NewAlert("First", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         await _repository.AddAsync(NewAlert("Second", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        var result = await _repository.GetAllAsync(page: 3, pageSize: 1);
+        var result = await _repository.GetAllAsync(new AlertQueryOptions { Page = 3, PageSize = 1 });
 
         Assert.Equal(2, result.TotalCount);
         Assert.Empty(result.Items);

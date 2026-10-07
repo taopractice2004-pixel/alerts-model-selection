@@ -1,0 +1,329 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "effort_mode": "low",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Operators can attach free-form tags to alerts, remove them, see them in AlertResponse, and filter GET /api/alerts by tag.",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "A new Tag entity has a many-to-many relationship with Alert, backed by a new join table and EF migration." },
+    { "id": "AC2", "text": "POST /api/alerts/{id}/tags adds one or more tags to the alert, deduplicating case-insensitively." },
+    { "id": "AC3", "text": "An alert holds at most 10 tags and each tag is 1-30 characters; violations are rejected with 400." },
+    { "id": "AC4", "text": "DELETE /api/alerts/{id}/tags/{tag} removes the tag from the alert; it returns 404 if the alert or the tag assignment does not exist." },
+    { "id": "AC5", "text": "GET /api/alerts accepts an optional tag filter that composes with isActive, severity, date range, and search." },
+    { "id": "AC6", "text": "AlertResponse includes the alert's tags." }
+  ],
+  "exact_source_files": [
+    {
+      "path": "AlertService.Models/Tag.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Add Tag entity with Id, Name, an Alerts collection, and a shared NormalizeName helper.",
+      "ac": ["AC1"],
+      "reason": "Entities live in AlertService.Models next to Alert.cs."
+    },
+    {
+      "path": "AlertService.Models/Alert.cs",
+      "action": "modify",
+      "anchor": "Alert",
+      "change": "Add a Tags collection for the many-to-many relationship.",
+      "ac": ["AC1", "AC6"],
+      "reason": "Alert is the owning entity of the relationship."
+    },
+    {
+      "path": "AlertService.Common/Constants/AlertConstants.cs",
+      "action": "modify",
+      "anchor": "AlertConstants",
+      "change": "Add TagMinLength 1, TagMaxLength 30, and MaxTagsPerAlert 10.",
+      "ac": ["AC3"],
+      "reason": "Field limits already live in AlertConstants."
+    },
+    {
+      "path": "AlertService.DTO/Requests/AddAlertTagsRequest.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Add request with a Tags list, validated as 1-10 items of 1-30 non-whitespace characters each.",
+      "ac": ["AC2", "AC3"],
+      "reason": "Request contracts live in AlertService.DTO/Requests and use IValidatableObject like AlertQueryRequest."
+    },
+    {
+      "path": "AlertService.DTO/Requests/AlertQueryRequest.cs",
+      "action": "modify",
+      "anchor": "AlertQueryRequest",
+      "change": "Add optional Tag property limited to the tag max length.",
+      "ac": ["AC5"],
+      "reason": "Existing list filters are bound from this query model."
+    },
+    {
+      "path": "AlertService.DTO/Responses/AlertResponse.cs",
+      "action": "modify",
+      "anchor": "AlertResponse",
+      "change": "Add a Tags list of strings.",
+      "ac": ["AC6"],
+      "reason": "AlertResponse is the single alert contract."
+    },
+    {
+      "path": "AlertService.Data/Interfaces/IAlertRepository.cs",
+      "action": "modify",
+      "anchor": "IAlertRepository.GetAllAsync",
+      "change": "Replace the long GetAllAsync parameter list with one AlertQueryOptions argument; add AddTagsAsync(alert, names) and RemoveTagAsync(alert, name) returning bool.",
+      "ac": ["AC2", "AC4", "AC5"],
+      "reason": "Repository abstraction used by the service layer."
+    },
+    {
+      "path": "AlertService.Data/Interfaces/AlertQueryOptions.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Add record holding the alert list filter, sort, and paging options.",
+      "ac": ["AC5"],
+      "reason": "Review fix R1: GetAllAsync exceeded the parameter limit."
+    },
+    {
+      "path": "AlertService.Data.SQL/AlertDbContext.cs",
+      "action": "modify",
+      "anchor": "AlertDbContext",
+      "change": "Add DbSet<Tag> Tags.",
+      "ac": ["AC1"],
+      "reason": "Context exposes one DbSet per entity."
+    },
+    {
+      "path": "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Configure Tags table, unique IX_Tags_Name, and the Alert-Tag many-to-many via AlertTags join table.",
+      "ac": ["AC1"],
+      "reason": "Configurations are discovered by ApplyConfigurationsFromAssembly, one file per entity."
+    },
+    {
+      "path": "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+      "action": "modify",
+      "anchor": "AlertRepository.GetAllAsync, GetByIdAsync",
+      "change": "Include Tags, filter by case-insensitive tag name via a private ApplyFilters, and implement AddTagsAsync (find-or-create tags) and RemoveTagAsync.",
+      "ac": ["AC2", "AC4", "AC5", "AC6"],
+      "reason": "All alert queries and persistence go through this repository."
+    },
+    {
+      "path": "AlertService.Data.SQL/Migrations/20261008100000_AddAlertTags.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Create Tags and AlertTags tables, the unique name index, and the foreign keys; Down drops them.",
+      "ac": ["AC1"],
+      "reason": "Schema changes ship as EF migrations after 20260923090951_InitialCreate."
+    },
+    {
+      "path": "AlertService.Data.SQL/Migrations/20261008100000_AddAlertTags.Designer.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Add the migration designer with the target model snapshot.",
+      "ac": ["AC1"],
+      "reason": "Every EF migration has a paired Designer file."
+    },
+    {
+      "path": "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs",
+      "action": "modify",
+      "anchor": "AlertDbContextModelSnapshot.BuildModel",
+      "change": "Add Tag, AlertTag join, and relationships to the model snapshot.",
+      "ac": ["AC1"],
+      "reason": "Snapshot must match the new model."
+    },
+    {
+      "path": "AlertService.API/Services/IAlertService.cs",
+      "action": "modify",
+      "anchor": "IAlertService",
+      "change": "Add AddTagsAsync and RemoveTagAsync.",
+      "ac": ["AC2", "AC3", "AC4"],
+      "reason": "Controllers call only this interface."
+    },
+    {
+      "path": "AlertService.API/Services/AlertManagementService.cs",
+      "action": "modify",
+      "anchor": "AlertManagementService.GetAllAsync",
+      "change": "Pass the tag filter to the repository through AlertQueryOptions; add AddTagsAsync (trim, dedupe, enforce 10 per alert) and RemoveTagAsync.",
+      "ac": ["AC2", "AC3", "AC4", "AC5"],
+      "reason": "Business rules and orchestration live here."
+    },
+    {
+      "path": "AlertService.API/Services/AddAlertTagsResult.cs",
+      "action": "create",
+      "anchor": "",
+      "change": "Add a result record with a nullable AlertResponse (null when not found or limit exceeded) and a TagLimitExceeded flag.",
+      "ac": ["AC3"],
+      "reason": "The service must tell the controller not-found apart from limit-exceeded without exceptions."
+    },
+    {
+      "path": "AlertService.API/Controllers/AlertsController.cs",
+      "action": "modify",
+      "anchor": "AlertsController",
+      "change": "Add POST {id}/tags (201 CreatedAtRoute, 400, 404) and DELETE {id}/tags/{tag} (204, 404) endpoints.",
+      "ac": ["AC2", "AC3", "AC4"],
+      "reason": "Routes are all on this controller."
+    },
+    {
+      "path": "AlertService.API/Mappings/AlertMappingExtensions.cs",
+      "action": "modify",
+      "anchor": "AlertMappingExtensions.ToResponse",
+      "change": "Map Tags to a name-sorted list of strings.",
+      "ac": ["AC6"],
+      "reason": "All entity-to-DTO mapping is here."
+    },
+    {
+      "path": "database/02_AlertServiceDb_Migrations.sql",
+      "action": "modify",
+      "anchor": "",
+      "change": "Append the AddAlertTags migration script before the final COMMIT.",
+      "ac": ["AC1"],
+      "reason": "Script is generated from EF migrations and kept in source control."
+    }
+  ],
+  "exact_test_files": [
+    { "path": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs", "action": "modify", "ac": ["AC5"] },
+    { "path": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTagTests.cs", "action": "create", "ac": ["AC1", "AC2", "AC4", "AC5", "AC6"] },
+    { "path": "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj", "action": "modify", "ac": [] },
+    { "path": "AlertService.API.Tests/Services/AlertManagementServiceTests.cs", "action": "modify", "ac": ["AC2", "AC3", "AC4", "AC5", "AC6"] },
+    { "path": "AlertService.API.Tests/Controllers/AlertsControllerTests.cs", "action": "modify", "ac": ["AC2", "AC3", "AC4", "AC5"] }
+  ],
+  "adjacent_dependencies": [
+    { "path": "AlertService.API.Tests/Services/AlertManagementServiceTests.cs", "why": "Moq GetAllAsync setups must pass one AlertQueryOptions argument (review fix R1)." },
+    { "path": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs", "why": "Existing GetAllAsync calls must build an AlertQueryOptions (review fix R1)." },
+    { "path": "AlertService.API/Program.cs", "why": "DI and optional migrate-on-startup pick up the new migration with no code change." },
+    { "path": "AlertService.API/AlertService.API.http", "why": "Sample requests do not yet cover the tag endpoints." }
+  ],
+  "implementation_steps": [
+    "1. Add Tag.cs and the Tags collection on Alert.cs in AlertService.Models.",
+    "2. Add tag limit constants to AlertConstants.cs.",
+    "3. Add AddAlertTagsRequest.cs, the Tag filter in AlertQueryRequest.cs, and Tags in AlertResponse.cs.",
+    "4. Add tag mapping to AlertMappingExtensions.cs.",
+    "5. Extend IAlertRepository.cs with the tag filter (before cancellationToken), AddTagsAsync, and RemoveTagAsync.",
+    "6. Add DbSet<Tag> in AlertDbContext.cs and create TagConfiguration.cs.",
+    "7. Update AlertRepository.cs to include Tags, filter by tag, and implement AddTagsAsync and RemoveTagAsync.",
+    "8. Create the AddAlertTags migration, its Designer, and update AlertDbContextModelSnapshot.cs.",
+    "9. Append the migration script to database/02_AlertServiceDb_Migrations.sql.",
+    "10. Add AddAlertTagsResult.cs and extend IAlertService.cs and AlertManagementService.cs.",
+    "11. Add the POST and DELETE tag endpoints to AlertsController.cs.",
+    "12. Run the build command and fix compile errors only."
+  ],
+  "planned_tests": [
+    { "ac": "AC1", "type": "success", "test": "Alert with tags persists and reloads through the Tag many-to-many join." },
+    { "ac": "AC2", "type": "success", "test": "AddTagsAsync stores new tags and reuses an existing Tag row shared by two alerts." },
+    { "ac": "AC2", "type": "edge", "test": "Service dedupes tags case-insensitively within the request and against tags already on the alert." },
+    { "ac": "AC2", "type": "failure", "test": "AddTagsAsync service returns a null alert when the alert id does not exist." },
+    { "ac": "AC2", "type": "success", "test": "Controller POST returns the updated alert for valid tags and 404 when the alert is missing." },
+    { "ac": "AC3", "type": "failure", "test": "Service flags TagLimitExceeded when existing plus new tags exceed 10, and controller returns 400." },
+    { "ac": "AC3", "type": "edge", "test": "Exactly 10 tags is accepted; request tags of length 0, 31, and whitespace-only fail validation; 30 chars passes." },
+    { "ac": "AC4", "type": "success", "test": "RemoveTagAsync removes the assignment case-insensitively and controller returns 204." },
+    { "ac": "AC4", "type": "failure", "test": "Controller returns 404 when the alert is missing or the tag is not assigned." },
+    { "ac": "AC5", "type": "success", "test": "GetAllAsync with a tag returns only alerts that have it, case-insensitively." },
+    { "ac": "AC5", "type": "edge", "test": "Tag filter combined with isActive, severity, date range, and search narrows results; service passes the tag to the repository." },
+    { "ac": "AC6", "type": "success", "test": "ToResponse maps tags as a name-sorted list, empty when the alert has none." }
+  ],
+  "contract_changes": {
+    "api": "New POST /api/alerts/{id}/tags and DELETE /api/alerts/{id}/tags/{tag}; GET /api/alerts gains optional tag query parameter; AlertResponse gains tags array.",
+    "database": "New Tags and AlertTags tables, unique IX_Tags_Name, new migration AddAlertTags.",
+    "config": "None",
+    "dependencies": "None",
+    "events": "None"
+  },
+  "boundaries": {
+    "primary_slice": "Alert tagging across AlertService.API controller/service, DTO, Models, Data, and Data.SQL.",
+    "out_of_scope": [
+      "Tag management endpoints (list, rename, delete tags)",
+      "Orphaned Tag row cleanup",
+      "Tags on create/update alert requests",
+      "README and AlertService.API.http documentation updates",
+      "Tag sorting or tag counts in the summary endpoint"
+    ]
+  },
+  "assumptions": [
+    "POST body is { \"tags\": [\"a\", \"b\"] }.",
+    "Tags are trimmed; uniqueness and matching are case-insensitive for add, remove, and filter.",
+    "Re-adding a tag already on the alert is a no-op, not an error.",
+    "A request that would push an alert past 10 tags is rejected whole with 400, and nothing is added.",
+    "The tag filter is an exact case-insensitive match on one tag name.",
+    "Migration files are hand-authored to match EF output because dotnet ef cannot be run in this stage.",
+    "Tag rows are not deleted when their last alert assignment is removed."
+  ],
+  "risks": [
+    "Medium: schema migration plus Include on the list query; rollback = revert the commit and apply the Down migration.",
+    "Low: two concurrent requests creating the same new tag can hit the unique index and return 500.",
+    "Low: positional GetAllAsync callers could mis-bind if tag is not placed last before cancellationToken."
+  ],
+  "scope_override_reason": "Many-to-many tagging crosses 7 projects and needs a migration, Designer, snapshot, and SQL script, so 20 source files are needed; 5 test files cover it after the review R5 split and R4 coverlet addition.",
+  "constraints": [
+    "Q1: POST tags success status → 201 Created with the updated AlertResponse",
+    "Q2: tag casing stored → lowercased (trimmed, lowercase invariant)"
+  ],
+  "build_commands": [
+    "dotnet build AlertService.sln"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.Data.SQL.Tests",
+    "dotnet test AlertService.API.Tests"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.sln --collect:\"XPlat Code Coverage\""
+  ],
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "code_review": {
+    "max_review_fix_iterations": 2,
+    "review_fix_iteration": 1,
+    "status": "PASSED",
+    "analyzer_commands": [
+      ".NET: NOT_CONFIGURED (no .editorconfig or analyzer package); dotnet build AlertService.sln -> 0 warnings"
+    ],
+    "findings": [
+      { "id": "ALERT-410-R1", "rule": "CR-PARAM-01", "severity": "BLOCKER", "status": "RESOLVED", "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5" },
+      { "id": "ALERT-410-R2", "rule": "CR-SIZE-01", "severity": "MAJOR", "status": "RESOLVED", "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5" },
+      { "id": "ALERT-410-R3", "rule": "CR-DUP-01", "severity": "MINOR", "status": "RESOLVED", "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5" },
+      { "id": "ALERT-410-R4", "rule": "CR-COV-01", "severity": "MINOR", "status": "RESOLVED", "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5" },
+      { "id": "ALERT-410-R5", "rule": "CR-SIZE-02", "severity": "MINOR", "status": "RESOLVED", "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5" },
+      {
+        "id": "ALERT-410-R8",
+        "rule": "CR-SIZE-02",
+        "severity": "MINOR",
+        "file": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs",
+        "line": 1,
+        "anchor": "AlertRepositoryTests",
+        "problem": "pre-existing: test file is 365 lines (target 300), baseline 358; measured manually.",
+        "suggested_fix": "Split the filter, sort, and paging tests into a separate AlertRepositoryQueryTests class.",
+        "auto_fixable": true,
+        "status": "OPEN"
+      },
+      {
+        "id": "ALERT-410-R6",
+        "rule": "CR-SIZE-02",
+        "severity": "MINOR",
+        "file": "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+        "line": 1,
+        "anchor": "AlertManagementServiceTests",
+        "problem": "Test file is 418 lines (target 300) and this change grew it from 261; measured manually.",
+        "suggested_fix": "Move the tag tests into a separate AlertManagementServiceTagTests class.",
+        "auto_fixable": true,
+        "status": "OPEN"
+      },
+      {
+        "id": "ALERT-410-R7",
+        "rule": "CR-SIZE-02",
+        "severity": "MINOR",
+        "file": "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+        "line": 1,
+        "anchor": "AlertsControllerTests",
+        "problem": "Test file is 436 lines (target 300) and this change grew it from 284; measured manually.",
+        "suggested_fix": "Move the tag endpoint and request-validation tests into a separate AlertsControllerTagTests class.",
+        "auto_fixable": true,
+        "status": "OPEN"
+      }
+    ]
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "plan_review": {
+    "status": "APPROVED",
+    "approved_via": "/implement-story ALERT-410 approved",
+    "date": "2026-10-08"
+  }
+}
