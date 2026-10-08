@@ -15,6 +15,7 @@ public interface IAlertRepository
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
         string? search = null,
+        string? tag = null,
         string sortBy = "createdDate",
         string sortDirection = "desc",
         int page = 1,
@@ -31,4 +32,16 @@ public interface IAlertRepository
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds the given normalized tag names to the alert, reusing existing Tag rows,
+    /// and returns the updated alert (with its tags). Returns <c>null</c> if the alert is missing.
+    /// </summary>
+    Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> normalizedTagNames, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a tag assignment (matched by normalized name) from the alert, deleting the
+    /// Tag row if it becomes orphaned. Returns <c>false</c> if the alert or the assignment is missing.
+    /// </summary>
+    Task<bool> RemoveTagAsync(int alertId, string normalizedTagName, CancellationToken cancellationToken = default);
 }

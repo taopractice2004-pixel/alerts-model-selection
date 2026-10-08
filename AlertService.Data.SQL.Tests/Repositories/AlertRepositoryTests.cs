@@ -355,4 +355,171 @@ public class AlertRepositoryTests : IDisposable
 
         Assert.False(await _context.Alerts.AnyAsync());
     }
+
+    [Fact]
+    public async Task AddTagsAsync_PersistsJoinRow_AndTagIsReturnedOnRead()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+
+        await _repository.AddTagsAsync(alert.Id, new[] { "prod" });
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(new[] { "prod" }, reloaded!.Tags.Select(t => t.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenAlertMissing_ReturnsNull()
+    {
+        var result = await _repository.AddTagsAsync(999, new[] { "prod" });
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WithSameNameOnTwoAlerts_ReusesSingleTagRow()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+
+        await _repository.AddTagsAsync(first.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(second.Id, new[] { "prod" });
+
+        Assert.Equal(1, await _context.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WithMixOfExistingAndNewNames_ReusesExistingRowsAndCreatesNew()
+    {
+        var owner = await _repository.AddAsync(NewAlert("Owner"));
+        var target = await _repository.AddAsync(NewAlert("Target"));
+        await _repository.AddTagsAsync(owner.Id, new[] { "prod", "db" });
+
+        await _repository.AddTagsAsync(target.Id, new[] { "prod", "db", "web" });
+
+        // "prod"/"db" reuse the existing rows; only "web" is created, so three Tag rows total.
+        Assert.Equal(3, await _context.Tags.CountAsync());
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(target.Id);
+        Assert.Equal(new[] { "db", "prod", "web" }, reloaded!.Tags.Select(t => t.Name).OrderBy(n => n).ToArray());
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenTagAlreadyAssigned_DoesNotDuplicate()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert.Id, new[] { "prod" });
+
+        await _repository.AddTagsAsync(alert.Id, new[] { "prod" });
+
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+        Assert.Single(reloaded!.Tags);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAssigned_RemovesAssignment_AndDeletesOrphanTag()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+        await _repository.AddTagsAsync(alert.Id, new[] { "prod" });
+
+        var removed = await _repository.RemoveTagAsync(alert.Id, "prod");
+
+        Assert.True(removed);
+        _context.ChangeTracker.Clear();
+        var reloaded = await _repository.GetByIdAsync(alert.Id);
+        Assert.Empty(reloaded!.Tags);
+        Assert.Equal(0, await _context.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenTagStillUsedByAnotherAlert_KeepsTagRow()
+    {
+        var first = await _repository.AddAsync(NewAlert("First"));
+        var second = await _repository.AddAsync(NewAlert("Second"));
+        await _repository.AddTagsAsync(first.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(second.Id, new[] { "prod" });
+
+        var removed = await _repository.RemoveTagAsync(first.Id, "prod");
+
+        Assert.True(removed);
+        Assert.Equal(1, await _context.Tags.CountAsync());
+        _context.ChangeTracker.Clear();
+        var reloadedSecond = await _repository.GetByIdAsync(second.Id);
+        Assert.Equal(new[] { "prod" }, reloadedSecond!.Tags.Select(t => t.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAlertMissing_ReturnsFalse()
+    {
+        var result = await _repository.RemoveTagAsync(999, "prod");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenTagNotAssigned_ReturnsFalse()
+    {
+        var alert = await _repository.AddAsync(NewAlert());
+
+        var result = await _repository.RemoveTagAsync(alert.Id, "prod");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_ReturnsOnlyAlertsCarryingThatTag()
+    {
+        var tagged = await _repository.AddAsync(NewAlert("Tagged", created: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+        var other = await _repository.AddAsync(NewAlert("Other", created: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
+        await _repository.AddTagsAsync(tagged.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(other.Id, new[] { "dev" });
+
+        var result = await _repository.GetAllAsync(tag: "prod");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Tagged", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagFilter_MatchesCaseInsensitively()
+    {
+        var tagged = await _repository.AddAsync(NewAlert("Tagged"));
+        await _repository.AddTagsAsync(tagged.Id, new[] { "prod" });
+
+        var result = await _repository.GetAllAsync(tag: "PROD");
+
+        Assert.Single(result.Items);
+        Assert.Equal("Tagged", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WithTagAndOtherFilters_ReturnsOnlyAlertsMatchingAllCriteria()
+    {
+        var match = await _repository.AddAsync(NewAlert("Match", Severity.Critical, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var wrongSeverity = await _repository.AddAsync(NewAlert("Wrong severity", Severity.Low, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc), isActive: true));
+        var wrongActive = await _repository.AddAsync(NewAlert("Inactive", Severity.Critical, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), isActive: false));
+        await _repository.AddTagsAsync(match.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(wrongSeverity.Id, new[] { "prod" });
+        await _repository.AddTagsAsync(wrongActive.Id, new[] { "prod" });
+
+        var result = await _repository.GetAllAsync(isActive: true, severity: Severity.Critical, tag: "prod");
+
+        Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Match", result.Items[0].Title);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WhenAlertHasNoTags_ReturnsEmptyTagCollection()
+    {
+        await _repository.AddAsync(NewAlert("Untagged"));
+
+        var result = await _repository.GetAllAsync();
+
+        Assert.Single(result.Items);
+        Assert.Empty(result.Items[0].Tags);
+    }
 }

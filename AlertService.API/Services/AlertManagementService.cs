@@ -1,4 +1,5 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -32,6 +33,7 @@ public class AlertManagementService : IAlertService
             request.CreatedFrom,
             request.CreatedTo,
             request.Search,
+            request.Tag,
             request.SortBy,
             request.SortDirection,
             request.Page,
@@ -142,5 +144,72 @@ public class AlertManagementService : IAlertService
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
+    }
+
+    public async Task<AddTagsResult> AddTagsAsync(int id, AddTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var requestedTags = NormalizeRequestedTags(request);
+        if (requestedTags.Count == 0)
+        {
+            return AddTagsResult.Invalid("At least one valid tag is required.");
+        }
+
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return AddTagsResult.NotFound();
+        }
+
+        var existingNames = alert.Tags.Select(t => t.Name).ToHashSet();
+        var newNames = requestedTags.Where(t => !existingNames.Contains(t)).ToList();
+
+        if (existingNames.Count + newNames.Count > AlertConstants.MaxTagsPerAlert)
+        {
+            return AddTagsResult.Invalid($"An alert cannot have more than {AlertConstants.MaxTagsPerAlert} tags.");
+        }
+
+        if (newNames.Count == 0)
+        {
+            return AddTagsResult.Succeeded(alert.ToResponse());
+        }
+
+        var updated = await _repository.AddTagsAsync(id, newNames, cancellationToken);
+        if (updated is null)
+        {
+            return AddTagsResult.NotFound();
+        }
+
+        _logger.LogInformation("Added {TagCount} tag(s) to alert {AlertId}", newNames.Count, id);
+        return AddTagsResult.Succeeded(updated.ToResponse());
+    }
+
+    // Trim + lowercase, drop out-of-range lengths, and dedupe within the request.
+    private static List<string> NormalizeRequestedTags(AddTagsRequest request)
+    {
+        return request.Tags
+            .Select(t => t.Trim().ToLowerInvariant())
+            .Where(t => t.Length >= AlertConstants.TagMinLength && t.Length <= AlertConstants.TagMaxLength)
+            .Distinct()
+            .ToList();
+    }
+
+    public async Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var normalized = (tag ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        var removed = await _repository.RemoveTagAsync(id, normalized, cancellationToken);
+        if (removed)
+        {
+            _logger.LogInformation("Removed tag {Tag} from alert {AlertId}", normalized, id);
+        }
+
+        return removed;
     }
 }

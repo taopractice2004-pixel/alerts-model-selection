@@ -45,6 +45,7 @@ public class AlertManagementServiceTests
                 null,
                 null,
                 null,
+                null,
                 "createdDate",
                 "desc",
                 1,
@@ -70,17 +71,18 @@ public class AlertManagementServiceTests
             CreatedFrom = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
             CreatedTo = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
             Search = "disk",
+            Tag = "prod",
             SortBy = "title",
             SortDirection = "asc",
             Page = 2,
             PageSize = 10
         };
-        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
+        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "prod", "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<Alert> { ExistingAlert(1) }, 11));
 
         var result = await _service.GetAllAsync(request);
 
-        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "prod", "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(2, result.Page);
         Assert.Equal(10, result.PageSize);
         Assert.Equal(11, result.TotalCount);
@@ -263,5 +265,135 @@ public class AlertManagementServiceTests
 
         Assert.False(result);
         _repository.Verify(r => r.DeleteAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static Alert AlertWithTags(int id, params string[] tagNames) => new()
+    {
+        Id = id,
+        Title = "Memory leak",
+        Description = "Heap growing",
+        Severity = Severity.Medium,
+        CreatedDate = FixedNow.UtcDateTime.AddDays(-1),
+        IsActive = true,
+        Tags = tagNames.Select(n => new Tag { Name = n }).ToList()
+    };
+
+    [Fact]
+    public async Task AddTagsAsync_NullRequest_Throws()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _service.AddTagsAsync(1, null!));
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WithNewTags_PersistsNormalizedNames_AndReturnsSuccessWithTags()
+    {
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(AlertWithTags(1));
+        _repository.Setup(r => r.AddTagsAsync(1, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AlertWithTags(1, "prod", "db"));
+
+        var result = await _service.AddTagsAsync(1, new AddTagsRequest { Tags = new List<string> { "  Prod  ", "DB" } });
+
+        Assert.Equal(AddTagsOutcome.Success, result.Outcome);
+        Assert.NotNull(result.Alert);
+        Assert.Equal(new[] { "db", "prod" }, result.Alert!.Tags);
+        _repository.Verify(r => r.AddTagsAsync(
+            1,
+            It.Is<IReadOnlyCollection<string>>(names => names.SequenceEqual(new[] { "prod", "db" })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WithCaseVariants_DedupesToSingleTag()
+    {
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(AlertWithTags(1));
+        _repository.Setup(r => r.AddTagsAsync(1, It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AlertWithTags(1, "prod"));
+
+        var result = await _service.AddTagsAsync(1, new AddTagsRequest { Tags = new List<string> { "Prod", "PROD", "prod" } });
+
+        Assert.Equal(AddTagsOutcome.Success, result.Outcome);
+        _repository.Verify(r => r.AddTagsAsync(
+            1,
+            It.Is<IReadOnlyCollection<string>>(names => names.Count == 1 && names.Single() == "prod"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenAllTagsAlreadyPresent_ReturnsSuccess_AndDoesNotPersist()
+    {
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(AlertWithTags(1, "prod"));
+
+        var result = await _service.AddTagsAsync(1, new AddTagsRequest { Tags = new List<string> { "PROD" } });
+
+        Assert.Equal(AddTagsOutcome.Success, result.Outcome);
+        Assert.Equal(new[] { "prod" }, result.Alert!.Tags);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenResultWouldExceedMax_ReturnsInvalid_AndDoesNotPersist()
+    {
+        var existing = AlertWithTags(1, "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10");
+        _repository.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+
+        var result = await _service.AddTagsAsync(1, new AddTagsRequest { Tags = new List<string> { "t11" } });
+
+        Assert.Equal(AddTagsOutcome.Invalid, result.Outcome);
+        Assert.NotNull(result.Error);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task AddTagsAsync_WhenNoValidTags_ReturnsInvalid(string tag)
+    {
+        var result = await _service.AddTagsAsync(1, new AddTagsRequest { Tags = new List<string> { tag } });
+
+        Assert.Equal(AddTagsOutcome.Invalid, result.Outcome);
+        _repository.Verify(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddTagsAsync_WhenAlertMissing_ReturnsNotFound()
+    {
+        _repository.Setup(r => r.GetByIdAsync(99, It.IsAny<CancellationToken>())).ReturnsAsync((Alert?)null);
+
+        var result = await _service.AddTagsAsync(99, new AddTagsRequest { Tags = new List<string> { "prod" } });
+
+        Assert.Equal(AddTagsOutcome.AlertNotFound, result.Outcome);
+        _repository.Verify(r => r.AddTagsAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenRemoved_ReturnsTrue_WithNormalizedName()
+    {
+        _repository.Setup(r => r.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _service.RemoveTagAsync(1, "  PROD  ");
+
+        Assert.True(result);
+        _repository.Verify(r => r.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_WhenAssignmentMissing_ReturnsFalse()
+    {
+        _repository.Setup(r => r.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _service.RemoveTagAsync(1, "prod");
+
+        Assert.False(result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RemoveTagAsync_WithEmptyTag_ReturnsFalse_WithoutHittingRepository(string tag)
+    {
+        var result = await _service.RemoveTagAsync(1, tag);
+
+        Assert.False(result);
+        _repository.Verify(r => r.RemoveTagAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

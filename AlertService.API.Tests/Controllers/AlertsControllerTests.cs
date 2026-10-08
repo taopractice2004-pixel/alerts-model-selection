@@ -1,10 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using AlertService.API.Controllers;
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.Common.Enums;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moq;
 
 namespace AlertService.API.Tests.Controllers;
@@ -282,5 +286,133 @@ public class AlertsControllerTests
         var result = await _controller.Delete(99, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task GetAll_PassesTagFilterToService()
+    {
+        var request = new AlertQueryRequest { Tag = "prod" };
+        _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse(SampleResponse(1)));
+
+        _ = await _controller.GetAll(request, CancellationToken.None);
+
+        _service.Verify(s => s.GetAllAsync(It.Is<AlertQueryRequest>(r => r.Tag == "prod"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenSucceeded_ReturnsOkWithTaggedAlert()
+    {
+        var request = new AddTagsRequest { Tags = new List<string> { "prod" } };
+        var response = SampleResponse();
+        response.Tags = new List<string> { "prod" };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddTagsResult.Succeeded(response));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<AlertResponse>(ok.Value);
+        Assert.Equal(new[] { "prod" }, body.Tags);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenAlertNotFound_ReturnsNotFound()
+    {
+        var request = new AddTagsRequest { Tags = new List<string> { "prod" } };
+        _service.Setup(s => s.AddTagsAsync(99, request, It.IsAny<CancellationToken>())).ReturnsAsync(AddTagsResult.NotFound());
+
+        var result = await _controller.AddTags(99, request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AddTags_WhenInvalid_ReturnsBadRequestValidationProblem()
+    {
+        _controller.ProblemDetailsFactory = new TestProblemDetailsFactory();
+        var request = new AddTagsRequest { Tags = new List<string> { "prod" } };
+        _service.Setup(s => s.AddTagsAsync(1, request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AddTagsResult.Invalid("An alert cannot have more than 10 tags."));
+
+        var result = await _controller.AddTags(1, request, CancellationToken.None);
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
+        Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenRemoved_ReturnsNoContent()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await _controller.RemoveTag(1, "prod", CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveTag_WhenMissing_ReturnsNotFound()
+    {
+        _service.Setup(s => s.RemoveTagAsync(1, "prod", It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await _controller.RemoveTag(1, "prod", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("thisTagNameIsWayTooLongToBeAcceptedHere")]
+    public void AddTagsRequest_WithInvalidTagLength_FailsValidation(string tag)
+    {
+        var request = new AddTagsRequest { Tags = new List<string> { tag } };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AddTagsRequest_WithMoreThanMaxTags_FailsValidation()
+    {
+        var request = new AddTagsRequest
+        {
+            Tags = Enumerable.Range(1, AlertConstants.MaxTagsPerAlert + 1).Select(i => $"tag{i}").ToList()
+        };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AddTagsRequest.Tags)));
+    }
+
+    [Fact]
+    public void AlertQueryRequest_WithTagLongerThanMax_FailsValidation()
+    {
+        var request = new AlertQueryRequest { Tag = new string('x', AlertConstants.TagMaxLength + 1) };
+
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains(nameof(AlertQueryRequest.Tag)));
+    }
+
+    private sealed class TestProblemDetailsFactory : ProblemDetailsFactory
+    {
+        public override ProblemDetails CreateProblemDetails(HttpContext httpContext, int? statusCode = null, string? title = null, string? type = null, string? detail = null, string? instance = null)
+            => new() { Status = statusCode ?? StatusCodes.Status400BadRequest, Detail = detail };
+
+        public override ValidationProblemDetails CreateValidationProblemDetails(HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null, string? title = null, string? type = null, string? detail = null, string? instance = null)
+            => new(modelStateDictionary) { Status = statusCode ?? StatusCodes.Status400BadRequest, Detail = detail };
     }
 }
