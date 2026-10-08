@@ -20,6 +20,7 @@ public class AlertRepository : IAlertRepository
         Severity? severity = null,
         DateTime? createdFrom = null,
         DateTime? createdTo = null,
+        string? tag = null,
         string? search = null,
         string sortBy = AlertConstants.SortByCreatedDate,
         string sortDirection = AlertConstants.SortDirectionDesc,
@@ -49,6 +50,12 @@ public class AlertRepository : IAlertRepository
             query = query.Where(a => a.CreatedDate <= createdTo.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var normalizedTag = NormalizeTag(tag);
+            query = query.Where(a => a.Tags.Any(alertTag => alertTag.NormalizedName == normalizedTag));
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var normalizedSearch = search.Trim().ToLower();
@@ -59,6 +66,8 @@ public class AlertRepository : IAlertRepository
         query = ApplySorting(query, sortBy, sortDirection);
 
         var items = await query
+            .Include(a => a.Tags)
+            .AsSplitQuery()
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -124,7 +133,9 @@ public class AlertRepository : IAlertRepository
 
     public Task<Alert?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        return _context.Alerts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        return _context.Alerts
+            .Include(a => a.Tags)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<Alert> AddAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -132,6 +143,55 @@ public class AlertRepository : IAlertRepository
         await _context.Alerts.AddAsync(alert, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         return alert;
+    }
+
+    public async Task AddTagsAsync(Alert alert, IReadOnlyCollection<string> tagNames, CancellationToken cancellationToken = default)
+    {
+        var normalizedNames = tagNames
+            .Select(NormalizeTag)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var existingTags = await _context.Tags
+            .Where(tag => normalizedNames.Contains(tag.NormalizedName))
+            .ToDictionaryAsync(tag => tag.NormalizedName, StringComparer.Ordinal, cancellationToken);
+
+        foreach (var tagName in tagNames)
+        {
+            var normalizedName = NormalizeTag(tagName);
+            if (alert.Tags.Any(tag => tag.NormalizedName == normalizedName))
+            {
+                continue;
+            }
+
+            if (!existingTags.TryGetValue(normalizedName, out var tag))
+            {
+                tag = new Tag
+                {
+                    Name = tagName,
+                    NormalizedName = normalizedName
+                };
+
+                existingTags[normalizedName] = tag;
+                _context.Tags.Add(tag);
+            }
+
+            alert.Tags.Add(tag);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(Alert alert, string normalizedTag, CancellationToken cancellationToken = default)
+    {
+        var existingTag = alert.Tags.FirstOrDefault(tag => tag.NormalizedName == normalizedTag);
+        if (existingTag is null)
+        {
+            return false;
+        }
+
+        alert.Tags.Remove(existingTag);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default)
@@ -144,5 +204,10 @@ public class AlertRepository : IAlertRepository
     {
         _context.Alerts.Remove(alert);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string NormalizeTag(string tag)
+    {
+        return tag.Trim().ToUpperInvariant();
     }
 }

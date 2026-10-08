@@ -1,4 +1,6 @@
 using AlertService.API.Mappings;
+using System.ComponentModel.DataAnnotations;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -31,6 +33,7 @@ public class AlertManagementService : IAlertService
             request.Severity,
             request.CreatedFrom,
             request.CreatedTo,
+            request.Tag,
             request.Search,
             request.SortBy,
             request.SortDirection,
@@ -90,6 +93,38 @@ public class AlertManagementService : IAlertService
         return created.ToResponse();
     }
 
+    public async Task<AlertResponse?> AddTagsAsync(int id, AddAlertTagsRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return null;
+        }
+
+        var requestedTags = request.Tags
+            .Select(tag => new TagInput(tag.Trim(), NormalizeTag(tag)))
+            .DistinctBy(tag => tag.NormalizedName)
+            .ToList();
+
+        var existingTags = alert.Tags
+            .Select(tag => tag.NormalizedName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var newAssignments = requestedTags.Count(tag => !existingTags.Contains(tag.NormalizedName));
+        if (alert.Tags.Count + newAssignments > AlertConstants.MaxTagsPerAlert)
+        {
+            throw new ValidationException($"An alert can have at most {AlertConstants.MaxTagsPerAlert} tags.");
+        }
+
+        await _repository.AddTagsAsync(alert, requestedTags.Select(tag => tag.Name).ToList(), cancellationToken);
+
+        _logger.LogInformation("Added {TagCount} tags to alert {AlertId}", requestedTags.Count, id);
+        return alert.ToResponse();
+    }
+
     public async Task<AlertResponse?> UpdateAsync(int id, UpdateAlertRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -129,6 +164,26 @@ public class AlertManagementService : IAlertService
         return alert.ToResponse();
     }
 
+    public async Task<AlertResponse?> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        var alert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (alert is null)
+        {
+            _logger.LogWarning("Cannot remove tag from alert {AlertId}: not found", id);
+            return null;
+        }
+
+        var removed = await _repository.RemoveTagAsync(alert, NormalizeTag(tag), cancellationToken);
+        if (!removed)
+        {
+            _logger.LogWarning("Cannot remove tag {Tag} from alert {AlertId}: assignment not found", tag, id);
+            return null;
+        }
+
+        _logger.LogInformation("Removed tag {Tag} from alert {AlertId}", tag, id);
+        return alert.ToResponse();
+    }
+
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         var alert = await _repository.GetByIdAsync(id, cancellationToken);
@@ -143,4 +198,11 @@ public class AlertManagementService : IAlertService
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
     }
+
+    private static string NormalizeTag(string tag)
+    {
+        return tag.Trim().ToUpperInvariant();
+    }
+
+    private sealed record TagInput(string Name, string NormalizedName);
 }

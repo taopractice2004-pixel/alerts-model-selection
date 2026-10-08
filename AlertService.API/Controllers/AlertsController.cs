@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations;
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -56,6 +58,17 @@ public class AlertsController : ControllerBase
         return CreatedAtRoute(nameof(GetById), new { id = created.Id }, created);
     }
 
+    /// <summary>Adds one or more tags to an existing alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] AddAlertTagsRequest request, CancellationToken cancellationToken)
+    {
+        var updated = await _alertService.AddTagsAsync(id, request, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     /// <summary>Updates an existing alert.</summary>
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
@@ -75,6 +88,21 @@ public class AlertsController : ControllerBase
     {
         var deactivated = await _alertService.DeactivateAsync(id, cancellationToken);
         return deactivated is null ? NotFound() : Ok(deactivated);
+    }
+
+    /// <summary>Removes a tag from an existing alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> RemoveTag(
+        int id,
+        [StringLength(AlertConstants.TagMaxLength, MinimumLength = AlertConstants.TagMinLength)]
+        [RegularExpression(AlertConstants.NonWhitespacePattern)] string tag,
+        CancellationToken cancellationToken)
+    {
+        var updated = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
     }
 
     /// <summary>Deletes an alert.</summary>

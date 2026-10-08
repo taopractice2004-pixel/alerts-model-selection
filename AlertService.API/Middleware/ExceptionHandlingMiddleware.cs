@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AlertService.API.Middleware;
@@ -21,6 +22,24 @@ public class ExceptionHandlingMiddleware
         try
         {
             await _next(context);
+        }
+        catch (ValidationException ex)
+        {
+            _logger.LogWarning(ex, "Validation failure for {Method} {Path}", context.Request.Method, context.Request.Path);
+
+            var problem = new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["tags"] = [ex.Message]
+            })
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "One or more validation errors occurred.",
+                Instance = context.Request.Path
+            };
+            problem.Extensions["traceId"] = context.TraceIdentifier;
+
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json");
         }
         catch (Exception ex)
         {
