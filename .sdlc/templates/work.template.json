@@ -1,0 +1,117 @@
+{
+  "work_type": "{{story | bug | testcase}}",
+  "work_id": "{{STORY_ID | BUG_ID | WORK_ID}}",
+  "effort_mode": "{{low | standard | deep}}",
+  "repository_mode": "{{EXISTING_PROJECT | NEW_PROJECT}}",
+  "summary": "{{1–3 lines: what the story, bug fix, or testcase delivers and why}}",
+  "acceptance_criteria": [
+    { "id": "AC1", "text": "{{acceptance criterion, expected bug behavior, or behavior to cover}}" }
+  ],
+  "exact_source_files": [
+    {
+      "path": "{{repository-relative path}}",
+      "action": "{{create | modify | delete}}",
+      "anchor": "{{class / function / method / component touched, or empty for a new file}}",
+      "change": "{{what changes in this file, in one or two plain sentences}}",
+      "ac": ["{{AC ids this file implements}}"],
+      "reason": "{{why this file: the anchor, endpoint, stack trace, or pattern that points here}}"
+    }
+  ],
+  "exact_test_files": [
+    {
+      "path": "{{repository-relative test path, or NOT_AVAILABLE}}",
+      "action": "{{create | modify}}",
+      "ac": ["{{AC ids covered by this test file}}"]
+    }
+  ],
+  "adjacent_dependencies": [
+    { "path": "{{path of a caller / consumer / contract that is NOT modified}}", "why": "{{how the change affects it}}" }
+  ],
+  "implementation_steps": [
+    "{{1. ordered step naming the file it touches}}"
+  ],
+  "planned_tests": [
+    { "ac": "{{AC id}}", "type": "{{success | failure | edge}}", "test": "{{behavior the unit test proves}}" }
+  ],
+  "contract_changes": {
+    "api": "{{None | endpoint / request / response change}}",
+    "database": "{{None | schema / migration / query change}}",
+    "config": "{{None | new or changed config key}}",
+    "dependencies": "{{None | added or upgraded package}}",
+    "events": "{{None | message / event / queue change}}"
+  },
+  "boundaries": {
+    "primary_slice": "{{main source area or entry point}}",
+    "out_of_scope": ["{{boundary intentionally not touched, or empty}}"]
+  },
+  "assumptions": [
+    "{{assumption the plan makes that the developer should confirm, or empty}}"
+  ],
+  "risks": [
+    "{{at least one line, always: level + why + rollback, e.g. Low: isolated guard clause; rollback = revert one file}}"
+  ],
+  "scope_override_reason": "{{empty, or why the slice needs more than 5 source files / 3 test files}}",
+  "constraints": [
+    "{{constraint, one short sentence; answered questions as \"Q<n>: <question in a few words> → <answer>\"}}"
+  ],
+  "build_commands": [
+    "{{narrowest build / compile / type-check command for the slice, or NOT_CONFIGURED}}"
+  ],
+  "unit_test_commands": [
+    "{{narrowest unit-test command for the slice, or TO_BE_CONFIGURED}}"
+  ],
+  "coverage_commands": [
+    "{{command or NOT_CONFIGURED}}"
+  ],
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "{{NOT_STARTED | TESTS_PASSED | BUGS_OPEN | RETEST_REQUIRED | ESCALATED_TO_DEVELOPER}}",
+    "open_bugs": [
+      {
+        "id": "{{<WORK-ID>-B<n>}}",
+        "acceptance_criterion": "{{AC id or None}}",
+        "failing_test": "{{test name / file}}",
+        "observed": "{{actual behavior or failure message}}",
+        "expected": "{{expected behavior}}",
+        "suspected_file": "{{source path or TO_BE_DISCOVERED}}"
+      }
+    ]
+  },
+  "code_review": {
+    "max_review_fix_iterations": 2,
+    "review_fix_iteration": 0,
+    "status": "{{NOT_STARTED | PASSED | FINDINGS_OPEN | FIXES_APPLIED | ESCALATED_TO_DEVELOPER}}",
+    "analyzer_commands": [
+      "{{configured static analysis / lint command for the touched files, or NOT_CONFIGURED}}"
+    ],
+    "findings": [
+      {
+        "id": "{{<WORK-ID>-R<n>; once RESOLVED, only id, rule, severity, status (and decided_via) are kept}}",
+        "rule": "{{rule id from standards/code-review-standards.md or a standard that applies to the file, e.g. CR-SIZE-01}}",
+        "severity": "{{BLOCKER | MAJOR | MINOR}}",
+        "file": "{{repository-relative path}}",
+        "line": "{{line or range}}",
+        "anchor": "{{class / method / function}}",
+        "problem": "{{one sentence, with the measured value when there is one}}",
+        "suggested_fix": "{{concrete fix}}",
+        "auto_fixable": true,
+        "status": "{{OPEN | APPROVED_FOR_FIX | FIX_APPLIED | RESOLVED | WAIVED}}",
+        "waiver_reason": "{{developer reason when WAIVED, or empty}}",
+        "decided_via": "{{exact command that approved or waived it, e.g. /fix-bugs STORY-12 approve R1, or empty}}"
+      }
+    ]
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [
+    "{{fact missing from local work cache or empty}}"
+  ],
+  "unresolved_questions": [
+    { "id": "Q1", "question": "{{question for the developer, or remove the entry when none}}", "answer": "" }
+  ],
+  "plan_review": {
+    "status": "{{PENDING | APPROVED | NOT_REQUIRED}}",
+    "approved_via": "{{exact command, e.g. /implement-story STORY-12 approved, or empty}}",
+    "date": "{{YYYY-MM-DD or empty}}"
+  }
+}

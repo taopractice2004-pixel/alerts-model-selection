@@ -1,4 +1,5 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
 using Microsoft.AspNetCore.Mvc;
@@ -85,5 +86,55 @@ public class AlertsController : ControllerBase
     {
         var deleted = await _alertService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();
+    }
+
+    /// <summary>Adds one or more tags to an alert.</summary>
+    [HttpPost("{id:int}/tags")]
+    [ProducesResponseType(typeof(AlertResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AlertResponse>> AddTags(int id, [FromBody] List<string> tags, CancellationToken cancellationToken)
+    {
+        if (tags is null || tags.Count == 0)
+        {
+            return CreateTagValidationProblem("At least one tag is required.");
+        }
+
+        try
+        {
+            var updated = await _alertService.AddTagsAsync(id, tags, cancellationToken);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (ArgumentException ex)
+        {
+            return CreateTagValidationProblem(ex.Message);
+        }
+    }
+
+    /// <summary>Removes a tag assignment from an alert.</summary>
+    [HttpDelete("{id:int}/tags/{tag}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(int id, string tag, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || tag.Trim().Length > AlertConstants.TagMaxLength)
+        {
+            return CreateTagValidationProblem(
+                $"Tag length must be between {AlertConstants.TagMinLength} and {AlertConstants.TagMaxLength} characters.");
+        }
+
+        var removed = await _alertService.RemoveTagAsync(id, tag, cancellationToken);
+        return removed ? NoContent() : NotFound();
+    }
+
+    private BadRequestObjectResult CreateTagValidationProblem(string message)
+    {
+        var details = new ValidationProblemDetails(new Dictionary<string, string[]>
+        {
+            ["tags"] = [message]
+        });
+
+        return BadRequest(details);
     }
 }

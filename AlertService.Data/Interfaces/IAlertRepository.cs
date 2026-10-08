@@ -10,15 +10,7 @@ namespace AlertService.Data.Interfaces;
 public interface IAlertRepository
 {
     Task<(IReadOnlyList<Alert> Items, int TotalCount)> GetAllAsync(
-        bool? isActive = null,
-        Severity? severity = null,
-        DateTime? createdFrom = null,
-        DateTime? createdTo = null,
-        string? search = null,
-        string sortBy = "createdDate",
-        string sortDirection = "desc",
-        int page = 1,
-        int pageSize = 20,
+        AlertQueryOptions options,
         CancellationToken cancellationToken = default);
 
     Task<(int TotalCount, int ActiveCount, int InactiveCount, int LowCount, int MediumCount, int HighCount, int CriticalCount)> GetSummaryAsync(
@@ -31,4 +23,8 @@ public interface IAlertRepository
     Task UpdateAsync(Alert alert, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Alert alert, CancellationToken cancellationToken = default);
+
+    Task<Alert?> AddTagsAsync(int alertId, IReadOnlyCollection<string> normalizedTags, CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(int alertId, string normalizedTag, CancellationToken cancellationToken = default);
 }

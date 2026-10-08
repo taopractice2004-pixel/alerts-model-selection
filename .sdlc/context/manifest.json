@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 2,
+  "stage": "setup-repo-context",
+  "generatedAtUtc": "2026-10-08T00:00:00Z",
+  "repositoryMode": "EXISTING_PROJECT",
+  "contextFiles": [
+    "manifest.json",
+    "project-profile.md"
+  ],
+  "detected": {
+    "technologies": [
+      "dotnet-8",
+      "aspnet-core-webapi",
+      "entity-framework-core",
+      "sql-server",
+      "xunit",
+      "moq",
+      "serilog",
+      "swagger"
+    ],
+    "sourceInputs": {
+      "requirementsDocs": [],
+      "rootDocs": [
+        "README.md"
+      ],
+      "buildFiles": [
+        "AlertService.sln",
+        "Directory.Build.props",
+        "dotnet-tools.json",
+        "AlertService.API/AlertService.API.csproj",
+        "AlertService.Data.SQL/AlertService.Data.SQL.csproj",
+        "AlertService.API.Tests/AlertService.API.Tests.csproj",
+        "AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+      ],
+      "standards": [
+        "standards/api-rest-standards.md",
+        "standards/backend-dotnet-standards.md",
+        "standards/code-review-standards.md",
+        "standards/coding-standards.md",
+        "standards/database-standards.md",
+        "standards/service-architecture-standards.md"
+      ],
+      "sampleSource": [
+        "AlertService.API/Program.cs",
+        "AlertService.API/Controllers/AlertsController.cs",
+        "AlertService.API/Services/AlertManagementService.cs",
+        "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+        "AlertService.Data.SQL/AlertDbContext.cs"
+      ]
+    }
+  },
+  "exclusions": {
+    "excludedPaths": [
+      ".git/",
+      ".vs/",
+      "AlertService.API/Logs/",
+      "TestResults/"
+    ],
+    "excludedPatterns": [
+      "**/bin/**",
+      "**/obj/**",
+      "*.user"
+    ],
+    "reason": "Generated, dependency, build, cache, binary or runtime-noise content that should normally not be used as Copilot context."
+  },
+  "standards": {
+    "note": "Routing index only; no rule text. Compact rules auto-apply via instruction files using applyTo patterns.",
+    "items": [
+      {
+        "id": "coding",
+        "name": "Global Coding Standards",
+        "source_file": "standards/coding-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/coding.instructions.md",
+        "applies_to": "**/*.cs,**/*.ts,**/*.tsx,**/*.js,**/*.jsx,**/*.sql",
+        "scope": "global",
+        "priority": "global"
+      },
+      {
+        "id": "code-review",
+        "name": "Code Review Standards",
+        "source_file": "standards/code-review-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/code-review.instructions.md",
+        "applies_to": "**/*.cs,**/*.ts,**/*.tsx,**/*.js,**/*.jsx",
+        "scope": "global",
+        "priority": "global"
+      },
+      {
+        "id": "backend-dotnet",
+        "name": "Backend .NET Standards",
+        "source_file": "standards/backend-dotnet-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/backend-dotnet.instructions.md",
+        "applies_to": "**/*.cs,**/*.csproj",
+        "scope": "backend",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "api-rest",
+        "name": "REST API Standards",
+        "source_file": "standards/api-rest-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/api-rest.instructions.md",
+        "applies_to": "**/*Controller.cs,**/openapi*.yaml,**/openapi*.yml,**/swagger*.yaml,**/swagger*.yml,**/*.openapi.yaml,**/*.openapi.yml",
+        "scope": "api-contract",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "database",
+        "name": "Database Standards",
+        "source_file": "standards/database-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/database.instructions.md",
+        "applies_to": "**/*.sql,**/Migrations/**,**/*DbContext.cs,**/*Repository.cs",
+        "scope": "database",
+        "priority": "high-when-present"
+      },
+      {
+        "id": "service-architecture",
+        "name": "Service Architecture Standards",
+        "source_file": "standards/service-architecture-standards.md",
+        "compact_instruction_file": ".github/instructions/standards/service-architecture.instructions.md",
+        "applies_to": "**/*Service.cs,**/*Client.cs,**/Program.cs,**/Startup.cs",
+        "scope": "service-architecture",
+        "priority": "high-when-present"
+      }
+    ]
+  },
+  "notes": "Context cache generated from existing repository code and local standards routing index."
+}

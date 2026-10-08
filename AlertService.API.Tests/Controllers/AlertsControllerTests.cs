@@ -9,7 +9,7 @@ using Moq;
 
 namespace AlertService.API.Tests.Controllers;
 
-public class AlertsControllerTests
+public partial class AlertsControllerTests
 {
     private readonly Mock<IAlertService> _service = new();
     private readonly AlertsController _controller;
@@ -35,7 +35,8 @@ public class AlertsControllerTests
         Description = "85% used",
         Severity = Severity.High,
         CreatedDate = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-        IsActive = true
+        IsActive = true,
+        Tags = ["ops", "disk"]
     };
 
     [Fact]
@@ -66,7 +67,8 @@ public class AlertsControllerTests
             PageSize = 10,
             SortBy = "title",
             SortDirection = "asc",
-            Search = "disk"
+            Search = "disk",
+            Tag = "Ops"
         };
         _service.Setup(s => s.GetAllAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(SamplePagedResponse(SampleResponse(1)));
 
@@ -283,4 +285,5 @@ public class AlertsControllerTests
 
         Assert.IsType<NotFoundResult>(result);
     }
+
 }

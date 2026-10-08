@@ -1,4 +1,5 @@
 using AlertService.API.Mappings;
+using AlertService.Common.Constants;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
 using AlertService.DTO.Responses;
@@ -26,17 +27,21 @@ public class AlertManagementService : IAlertService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var (alerts, totalCount) = await _repository.GetAllAsync(
-            request.IsActive,
-            request.Severity,
-            request.CreatedFrom,
-            request.CreatedTo,
-            request.Search,
-            request.SortBy,
-            request.SortDirection,
-            request.Page,
-            request.PageSize,
-            cancellationToken);
+        var options = new AlertQueryOptions
+        {
+            IsActive = request.IsActive,
+            Severity = request.Severity,
+            CreatedFrom = request.CreatedFrom,
+            CreatedTo = request.CreatedTo,
+            Search = request.Search,
+            Tag = request.Tag,
+            SortBy = request.SortBy,
+            SortDirection = request.SortDirection,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+
+        var (alerts, totalCount) = await _repository.GetAllAsync(options, cancellationToken);
 
         return new PagedResponse<AlertResponse>
         {
@@ -142,5 +147,81 @@ public class AlertManagementService : IAlertService
 
         _logger.LogInformation("Deleted alert {AlertId}", id);
         return true;
+    }
+
+    public async Task<AlertResponse?> AddTagsAsync(int id, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+
+        var normalizedTags = NormalizeAndValidateTags(tags);
+        var existingAlert = await _repository.GetByIdAsync(id, cancellationToken);
+        if (existingAlert is null)
+        {
+            _logger.LogWarning("Cannot add tags to alert {AlertId}: not found", id);
+            return null;
+        }
+
+        var finalTagCount = existingAlert.AlertTags
+            .Select(at => at.Tag.NormalizedValue)
+            .Union(normalizedTags, StringComparer.Ordinal)
+            .Count();
+
+        if (finalTagCount > AlertConstants.MaxTagsPerAlert)
+        {
+            throw new ArgumentException($"An alert can have at most {AlertConstants.MaxTagsPerAlert} tags.", nameof(tags));
+        }
+
+        var updated = await _repository.AddTagsAsync(id, normalizedTags, cancellationToken);
+        return updated?.ToResponse();
+    }
+
+    public Task<bool> RemoveTagAsync(int id, string tag, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            throw new ArgumentException("Tag is required.", nameof(tag));
+        }
+
+        if (tag.Length > AlertConstants.TagMaxLength)
+        {
+            throw new ArgumentException($"Tag cannot exceed {AlertConstants.TagMaxLength} characters.", nameof(tag));
+        }
+
+        return _repository.RemoveTagAsync(id, NormalizeTag(tag), cancellationToken);
+    }
+
+    private static IReadOnlyCollection<string> NormalizeAndValidateTags(IReadOnlyCollection<string> tags)
+    {
+        if (tags.Count == 0)
+        {
+            throw new ArgumentException("At least one tag is required.", nameof(tags));
+        }
+
+        var normalizedTags = tags
+            .Select(NormalizeTag)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (normalizedTags.Length == 0)
+        {
+            throw new ArgumentException("At least one valid tag is required.", nameof(tags));
+        }
+
+        foreach (var normalizedTag in normalizedTags)
+        {
+            if (normalizedTag.Length < AlertConstants.TagMinLength || normalizedTag.Length > AlertConstants.TagMaxLength)
+            {
+                throw new ArgumentException(
+                    $"Each tag length must be between {AlertConstants.TagMinLength} and {AlertConstants.TagMaxLength} characters.",
+                    nameof(tags));
+            }
+        }
+
+        return normalizedTags;
+    }
+
+    private static string NormalizeTag(string tag)
+    {
+        return tag.Trim().ToLowerInvariant();
     }
 }

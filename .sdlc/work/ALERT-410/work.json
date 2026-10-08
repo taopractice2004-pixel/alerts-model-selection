@@ -1,0 +1,514 @@
+{
+  "work_type": "story",
+  "work_id": "ALERT-410",
+  "effort_mode": "standard",
+  "repository_mode": "EXISTING_PROJECT",
+  "summary": "Add first-class alert tags so operators can assign, remove, and filter alerts by tag.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "Add a new Tag concept with a many-to-many relationship to Alert persisted via EF Core migration."
+    },
+    {
+      "id": "AC2",
+      "text": "POST /api/alerts/{id}/tags adds one or more tags with case-insensitive dedupe, max 10 tags per alert, and each tag length 1 to 30."
+    },
+    {
+      "id": "AC3",
+      "text": "DELETE /api/alerts/{id}/tags/{tag} removes a tag assignment and returns 404 when the alert or assignment does not exist."
+    },
+    {
+      "id": "AC4",
+      "text": "GET /api/alerts supports an optional tag filter that composes with existing filters."
+    },
+    {
+      "id": "AC5",
+      "text": "AlertResponse includes tags for each returned alert."
+    }
+  ],
+  "exact_source_files": [
+    {
+      "path": "AlertService.Models/Tag.cs",
+      "action": "create",
+      "anchor": "Tag",
+      "change": "Add the tag entity with normalized value support and navigation to alert links.",
+      "ac": [
+        "AC1",
+        "AC2",
+        "AC3",
+        "AC5"
+      ],
+      "reason": "Domain model requires a dedicated tag aggregate for many-to-many persistence."
+    },
+    {
+      "path": "AlertService.Models/AlertTag.cs",
+      "action": "create",
+      "anchor": "AlertTag",
+      "change": "Add the join entity between alerts and tags with composite key fields and navigations.",
+      "ac": [
+        "AC1",
+        "AC2",
+        "AC3",
+        "AC5"
+      ],
+      "reason": "Join entity is needed to model and query the many-to-many relationship explicitly."
+    },
+    {
+      "path": "AlertService.Models/Alert.cs",
+      "action": "modify",
+      "anchor": "Alert",
+      "change": "Add navigation for tag assignments so tag data can be loaded and mapped in existing queries.",
+      "ac": [
+        "AC1",
+        "AC5"
+      ],
+      "reason": "Alert entity is the root read model returned by list and detail endpoints."
+    },
+    {
+      "path": "AlertService.DTO/Requests/AlertQueryRequest.cs",
+      "action": "modify",
+      "anchor": "AlertQueryRequest",
+      "change": "Add optional tag query input with validation aligned to tag length constraints.",
+      "ac": [
+        "AC4"
+      ],
+      "reason": "GET list filter contract is defined in this request DTO."
+    },
+    {
+      "path": "AlertService.DTO/Responses/AlertResponse.cs",
+      "action": "modify",
+      "anchor": "AlertResponse",
+      "change": "Add a tags collection in API responses.",
+      "ac": [
+        "AC5"
+      ],
+      "reason": "Response DTO must expose tags per acceptance criteria."
+    },
+    {
+      "path": "AlertService.Common/Constants/AlertConstants.cs",
+      "action": "modify",
+      "anchor": "AlertConstants",
+      "change": "Keep tag and paging constants in the planned scope recorded for this story.",
+      "ac": [
+        "AC2",
+        "AC4"
+      ],
+      "reason": "Approved review finding ALERT-410-R4 requires recording this already-touched source file in scope."
+    },
+    {
+      "path": "AlertService.Data/Interfaces/IAlertRepository.cs",
+      "action": "modify",
+      "anchor": "IAlertRepository",
+      "change": "Extend read filter input and add repository operations to add and remove tag assignments.",
+      "ac": [
+        "AC2",
+        "AC3",
+        "AC4",
+        "AC5"
+      ],
+      "reason": "Service layer relies on repository abstraction for all persistence behavior."
+    },
+    {
+      "path": "AlertService.Data/Interfaces/AlertQueryOptions.cs",
+      "action": "create",
+      "anchor": "AlertQueryOptions",
+      "change": "Add repository query options object to keep filter and paging input cohesive.",
+      "ac": [
+        "AC4",
+        "AC5"
+      ],
+      "reason": "Review finding ALERT-410-R1 replaced high-parameter repository query signatures with one options object."
+    },
+    {
+      "path": "AlertService.Data.SQL/AlertDbContext.cs",
+      "action": "modify",
+      "anchor": "AlertDbContext",
+      "change": "Register DbSet entries for Tag and AlertTag.",
+      "ac": [
+        "AC1"
+      ],
+      "reason": "EF Core context must track new entities and apply their configurations."
+    },
+    {
+      "path": "AlertService.Data.SQL/Configurations/TagConfiguration.cs",
+      "action": "create",
+      "anchor": "TagConfiguration",
+      "change": "Configure table, key, uniqueness, and length constraints for tags.",
+      "ac": [
+        "AC1",
+        "AC2",
+        "AC3"
+      ],
+      "reason": "Tag table constraints must enforce persistence rules and case-insensitive dedupe strategy."
+    },
+    {
+      "path": "AlertService.Data.SQL/Configurations/AlertTagConfiguration.cs",
+      "action": "create",
+      "anchor": "AlertTagConfiguration",
+      "change": "Configure composite key and relationships for the join table.",
+      "ac": [
+        "AC1",
+        "AC2",
+        "AC3"
+      ],
+      "reason": "Join mapping is required for relational integrity and performant filtering."
+    },
+    {
+      "path": "AlertService.Data.SQL/Repositories/AlertRepository.cs",
+      "action": "modify",
+      "anchor": "AlertRepository.GetAllAsync",
+      "change": "Apply optional tag filter, eagerly load tags for mappings, and add create/remove tag assignment logic.",
+      "ac": [
+        "AC2",
+        "AC3",
+        "AC4",
+        "AC5"
+      ],
+      "reason": "Repository currently owns all query composition and EF persistence operations."
+    },
+    {
+      "path": "AlertService.API/Mappings/AlertMappingExtensions.cs",
+      "action": "modify",
+      "anchor": "AlertMappingExtensions.ToResponse",
+      "change": "Map alert tag entities into the response tags collection.",
+      "ac": [
+        "AC5"
+      ],
+      "reason": "Entity-to-DTO projection is centralized in this mapping extension."
+    },
+    {
+      "path": "AlertService.API/Services/IAlertService.cs",
+      "action": "modify",
+      "anchor": "IAlertService",
+      "change": "Add service methods for adding and removing tags and update listing contract usage.",
+      "ac": [
+        "AC2",
+        "AC3",
+        "AC4"
+      ],
+      "reason": "Controller contracts are defined by this business service interface."
+    },
+    {
+      "path": "AlertService.API/Services/AlertManagementService.cs",
+      "action": "modify",
+      "anchor": "AlertManagementService",
+      "change": "Implement tag business rules, input normalization, dedupe, max-count enforcement, and repository orchestration.",
+      "ac": [
+        "AC2",
+        "AC3",
+        "AC4",
+        "AC5"
+      ],
+      "reason": "Business rules belong in the service layer before persistence calls."
+    },
+    {
+      "path": "AlertService.API/Controllers/AlertsController.cs",
+      "action": "modify",
+      "anchor": "AlertsController",
+      "change": "Add POST and DELETE tag endpoints and route responses for not-found and success flows.",
+      "ac": [
+        "AC2",
+        "AC3"
+      ],
+      "reason": "HTTP routes and status code behavior are implemented in the controller layer."
+    },
+    {
+      "path": "AlertService.Data.SQL/Migrations/20261008085126_AddAlertTags.cs",
+      "action": "create",
+      "anchor": "AddAlertTags",
+      "change": "Create migration for Tags and AlertTags tables with indexes and foreign keys.",
+      "ac": [
+        "AC1"
+      ],
+      "reason": "Schema changes must be tracked in EF migration artifacts for deployment."
+    },
+    {
+      "path": "AlertService.Data.SQL/Migrations/20261008085126_AddAlertTags.Designer.cs",
+      "action": "create",
+      "anchor": "AddAlertTags",
+      "change": "Capture generated migration model metadata for the AddAlertTags migration.",
+      "ac": [
+        "AC1"
+      ],
+      "reason": "EF migration designer file is required companion metadata for the new migration."
+    },
+    {
+      "path": "AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs",
+      "action": "modify",
+      "anchor": "AlertDbContextModelSnapshot",
+      "change": "Update snapshot to include Tag and AlertTag entities and relationships.",
+      "ac": [
+        "AC1"
+      ],
+      "reason": "EF snapshot must match the model after schema changes."
+    }
+  ],
+  "exact_test_files": [
+    {
+      "path": "AlertService.API.Tests/Controllers/AlertsControllerTests.cs",
+      "action": "modify",
+      "ac": [
+        "AC2",
+        "AC3"
+      ]
+    },
+    {
+      "path": "AlertService.API.Tests/Controllers/AlertsControllerTagTests.cs",
+      "action": "create",
+      "ac": [
+        "AC2",
+        "AC3"
+      ]
+    },
+    {
+      "path": "AlertService.API.Tests/Services/AlertManagementServiceTests.cs",
+      "action": "modify",
+      "ac": [
+        "AC2",
+        "AC3",
+        "AC4",
+        "AC5"
+      ]
+    },
+    {
+      "path": "AlertService.API.Tests/Services/AlertManagementServiceQueryTests.cs",
+      "action": "create",
+      "ac": [
+        "AC4",
+        "AC5"
+      ]
+    },
+    {
+      "path": "AlertService.API.Tests/Services/AlertManagementServiceTagTests.cs",
+      "action": "create",
+      "ac": [
+        "AC2",
+        "AC3",
+        "AC5"
+      ]
+    },
+    {
+      "path": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs",
+      "action": "modify",
+      "ac": [
+        "AC1",
+        "AC2",
+        "AC3",
+        "AC4",
+        "AC5"
+      ]
+    },
+    {
+      "path": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryGetAllTests.cs",
+      "action": "create",
+      "ac": [
+        "AC4",
+        "AC5"
+      ]
+    },
+    {
+      "path": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTagTests.cs",
+      "action": "create",
+      "ac": [
+        "AC1",
+        "AC2",
+        "AC3"
+      ]
+    }
+  ],
+  "adjacent_dependencies": [
+    {
+      "path": "database/02_AlertServiceDb_Migrations.sql",
+      "why": "Release scripts should be regenerated after the new migration is created."
+    },
+    {
+      "path": "README.md",
+      "why": "API and query examples should be updated later to document the new tag routes and filter."
+    }
+  ],
+  "implementation_steps": [
+    "1. Add Tag and AlertTag entities in AlertService.Models/Tag.cs and AlertService.Models/AlertTag.cs and extend AlertService.Models/Alert.cs navigation.",
+    "2. Extend contracts in AlertService.DTO/Requests/AlertQueryRequest.cs and AlertService.DTO/Responses/AlertResponse.cs for tag input and output.",
+    "3. Extend data abstraction in AlertService.Data/Interfaces/IAlertRepository.cs with tag operations and tag-aware list filtering.",
+    "4. Add EF mappings in AlertService.Data.SQL/Configurations/TagConfiguration.cs and AlertService.Data.SQL/Configurations/AlertTagConfiguration.cs and register sets in AlertService.Data.SQL/AlertDbContext.cs.",
+    "5. Implement tag query and assignment persistence in AlertService.Data.SQL/Repositories/AlertRepository.cs.",
+    "6. Update mapping in AlertService.API/Mappings/AlertMappingExtensions.cs to project tags in responses.",
+    "7. Add service signatures in AlertService.API/Services/IAlertService.cs and business logic in AlertService.API/Services/AlertManagementService.cs.",
+    "8. Add tag endpoints in AlertService.API/Controllers/AlertsController.cs with expected status codes.",
+    "9. Add EF migration artifacts in AlertService.Data.SQL/Migrations/<timestamp>_AddAlertTags.cs, AlertService.Data.SQL/Migrations/<timestamp>_AddAlertTags.Designer.cs, and AlertService.Data.SQL/Migrations/AlertDbContextModelSnapshot.cs.",
+    "10. Extend tests in AlertService.API.Tests/Controllers/AlertsControllerTests.cs, AlertService.API.Tests/Services/AlertManagementServiceTests.cs, and AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs."
+  ],
+  "planned_tests": [
+    {
+      "ac": "AC1",
+      "type": "success",
+      "test": "Repository persists alerts with tags and loads joined tags through normal query paths."
+    },
+    {
+      "ac": "AC1",
+      "type": "edge",
+      "test": "Migration model enforces unique normalized tag value and composite join key constraints."
+    },
+    {
+      "ac": "AC2",
+      "type": "success",
+      "test": "Controller and service add multiple tags to an existing alert and return updated tag list."
+    },
+    {
+      "ac": "AC2",
+      "type": "failure",
+      "test": "Adding tags to a missing alert returns not found behavior from service and controller."
+    },
+    {
+      "ac": "AC2",
+      "type": "edge",
+      "test": "Service dedupes case-insensitive duplicates and rejects invalid length or max-count overflow."
+    },
+    {
+      "ac": "AC3",
+      "type": "success",
+      "test": "Deleting an existing tag assignment removes the relation and reports success."
+    },
+    {
+      "ac": "AC3",
+      "type": "failure",
+      "test": "Deleting a tag from a missing alert or missing assignment returns not found behavior."
+    },
+    {
+      "ac": "AC4",
+      "type": "success",
+      "test": "Repository GetAll applies tag filter together with isActive, severity, date, and search filters."
+    },
+    {
+      "ac": "AC4",
+      "type": "edge",
+      "test": "Tag filter matching is case-insensitive and yields empty results when no matching tag exists."
+    },
+    {
+      "ac": "AC5",
+      "type": "success",
+      "test": "AlertResponse mapping includes all assigned tags for list and detail responses."
+    }
+  ],
+  "contract_changes": {
+    "api": "Add POST /api/alerts/{id}/tags and DELETE /api/alerts/{id}/tags/{tag}, add optional tag query filter, and include tags in AlertResponse.",
+    "database": "Add Tags and AlertTags tables with indexes, foreign keys, and relationship snapshot updates.",
+    "config": "None",
+    "dependencies": "None",
+    "events": "None"
+  },
+  "boundaries": {
+    "primary_slice": "Alert CRUD API, service orchestration, and SQL repository with EF Core model updates.",
+    "out_of_scope": [
+      "Regenerating database/02_AlertServiceDb_Migrations.sql is deferred to migration script generation workflow.",
+      "Non-tag API behavior and summary endpoint semantics remain unchanged."
+    ]
+  },
+  "assumptions": [
+    "Tag endpoints return the updated AlertResponse payload to keep behavior aligned with existing update-style endpoints."
+  ],
+  "risks": [
+    "Medium: tag normalization and dedupe rules can drift between API and database unless one canonical strategy is used; rollback = revert tag model and migration changes together."
+  ],
+  "scope_override_reason": "This story spans API contracts, business rules, EF model, migration artifacts, and mapping so the source-file cap is intentionally exceeded.",
+  "constraints": [
+    "Q1: tag casing strategy for dedupe and output -> force lowercase",
+    "Q2: behavior when adding tags exceeds max 10 -> reject with 400"
+  ],
+  "build_commands": [
+    "dotnet build AlertService.API/AlertService.API.csproj"
+  ],
+  "unit_test_commands": [
+    "dotnet test AlertService.API.Tests/AlertService.API.Tests.csproj",
+    "dotnet test AlertService.Data.SQL.Tests/AlertService.Data.SQL.Tests.csproj"
+  ],
+  "coverage_commands": [
+    "dotnet test AlertService.sln --collect:\"XPlat Code Coverage\""
+  ],
+  "test_fix_loop": {
+    "max_fix_iterations": 3,
+    "fix_iteration": 0,
+    "status": "TESTS_PASSED",
+    "open_bugs": []
+  },
+  "code_review": {
+    "max_review_fix_iterations": 2,
+    "review_fix_iteration": 1,
+    "status": "PASSED",
+    "analyzer_commands": [
+      ".NET: dotnet build AlertService.API/AlertService.API.csproj -> SUCCESS"
+    ],
+    "findings": [
+      {
+        "id": "ALERT-410-R1",
+        "rule": "CR-PARAM-01",
+        "severity": "BLOCKER",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R2",
+        "rule": "CR-SIZE-01",
+        "severity": "MAJOR",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R3",
+        "rule": "CR-SIZE-01",
+        "severity": "MAJOR",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R4",
+        "rule": "CR-SCOPE-01",
+        "severity": "MAJOR",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R5",
+        "rule": "CR-COV-01",
+        "severity": "MINOR",
+        "file": "AlertService.Data.SQL.Tests/Repositories/AlertRepositoryTests.cs",
+        "line": 1,
+        "anchor": "Coverage collection",
+        "problem": "fix did not hold: coverage collection still reports a collector warning and does not provide explicit coverage evidence for every changed project.",
+        "suggested_fix": "rerun /unit-testing ALERT-410, which adds the missing coverage command",
+        "auto_fixable": true,
+        "status": "OPEN",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R6",
+        "rule": "CR-SIZE-02",
+        "severity": "MINOR",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R7",
+        "rule": "CR-SIZE-02",
+        "severity": "MINOR",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      },
+      {
+        "id": "ALERT-410-R8",
+        "rule": "CR-SIZE-02",
+        "severity": "MINOR",
+        "status": "RESOLVED",
+        "decided_via": "/fix-bugs ALERT-410 approve R1 R2 R3 R4 R5 R6 R7 R8"
+      }
+    ]
+  },
+  "repo_context_fallback_needed": false,
+  "missing_facts": [],
+  "unresolved_questions": [],
+  "plan_review": {
+    "status": "APPROVED",
+    "approved_via": "/implement-story ALERT-410 approved",
+    "date": "2026-10-08"
+  }
+}

@@ -1,4 +1,5 @@
 using AlertService.API.Services;
+using AlertService.Common.Constants;
 using AlertService.Common.Enums;
 using AlertService.Data.Interfaces;
 using AlertService.DTO.Requests;
@@ -9,7 +10,7 @@ using Moq;
 
 namespace AlertService.API.Tests.Services;
 
-public class AlertManagementServiceTests
+public partial class AlertManagementServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -36,55 +37,26 @@ public class AlertManagementServiceTests
         IsActive = true
     };
 
-    [Fact]
-    public async Task GetAllAsync_MapsEntitiesToPagedResponse()
+    private static Alert ExistingAlertWithTags(int id, params string[] normalizedTags)
     {
-        _repository.Setup(r => r.GetAllAsync(
-                null,
-                null,
-                null,
-                null,
-                null,
-                "createdDate",
-                "desc",
-                1,
-                20,
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<Alert> { ExistingAlert(1), ExistingAlert(2) }, 2));
+        var alert = ExistingAlert(id);
 
-        var result = await _service.GetAllAsync(new AlertQueryRequest());
-
-        Assert.Equal(2, result.Items.Count);
-        Assert.Equal(new[] { 1, 2 }, result.Items.Select(r => r.Id));
-        Assert.Equal(2, result.TotalCount);
-        Assert.Equal(1, result.TotalPages);
-    }
-
-    [Fact]
-    public async Task GetAllAsync_PassesQueryOptionsToRepository()
-    {
-        var request = new AlertQueryRequest
+        foreach (var normalizedTag in normalizedTags)
         {
-            IsActive = true,
-            Severity = Severity.Critical,
-            CreatedFrom = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
-            CreatedTo = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
-            Search = "disk",
-            SortBy = "title",
-            SortDirection = "asc",
-            Page = 2,
-            PageSize = 10
-        };
-        _repository.Setup(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((new List<Alert> { ExistingAlert(1) }, 11));
+            var tag = new Tag
+            {
+                Value = normalizedTag,
+                NormalizedValue = normalizedTag
+            };
 
-        var result = await _service.GetAllAsync(request);
+            alert.AlertTags.Add(new AlertTag
+            {
+                Alert = alert,
+                Tag = tag
+            });
+        }
 
-        _repository.Verify(r => r.GetAllAsync(true, Severity.Critical, request.CreatedFrom, request.CreatedTo, "disk", "title", "asc", 2, 10, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(2, result.Page);
-        Assert.Equal(10, result.PageSize);
-        Assert.Equal(11, result.TotalCount);
-        Assert.Equal(2, result.TotalPages);
+        return alert;
     }
 
     [Fact]
@@ -264,4 +236,5 @@ public class AlertManagementServiceTests
         Assert.False(result);
         _repository.Verify(r => r.DeleteAsync(It.IsAny<Alert>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
 }
